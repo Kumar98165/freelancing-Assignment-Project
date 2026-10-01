@@ -8,6 +8,7 @@ from app.routes.product_routes import product_bp
 from app.routes.category_routes import category_bp
 from app.routes.inventory_routes import inventory_bp
 from app.routes.setting_routes import setting_bp
+from app.routes.sale_routes import sale_bp
 
 def create_app(config_class=Config):
     app = Flask(__name__)
@@ -48,6 +49,7 @@ def create_app(config_class=Config):
     app.register_blueprint(category_bp)
     app.register_blueprint(inventory_bp)
     app.register_blueprint(setting_bp)
+    app.register_blueprint(sale_bp)
 
     # Root API health check
     @app.route('/api/health', methods=['GET'])
