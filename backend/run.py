@@ -10,4 +10,6 @@ if __name__ == '__main__':
     
     port = int(os.environ.get('PORT', 5000))
     print(f"[*] TzSuperPOS Flask Backend running on http://127.0.0.1:{port}")
-    app.run(host='0.0.0.0', port=port, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=True)
+
+# reload trigger 1790886026.549255

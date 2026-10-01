@@ -4,9 +4,12 @@ import {
   X, Filter, DollarSign,
   Receipt, TrendingUp, CheckCircle2,
   Calendar, CreditCard, Download,
-  Smartphone, Banknote, Sparkles, RotateCcw
+  Smartphone, Banknote, Sparkles, RotateCcw,
+  ShoppingCart
 } from 'lucide-react';
 import { KPICard, Pagination } from '../common';
+import posService from '../../services/posService';
+import { useSettings } from '../../context/SettingsContext';
 
 export interface SaleRecord {
   id: string;
@@ -179,6 +182,7 @@ const mockSalesData: SaleRecord[] = [
 export type DatePresetType = 'ALL' | 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'CUSTOM';
 
 export default function CashierSalesView() {
+  const { settings } = useSettings();
   const [sales] = useState<SaleRecord[]>(mockSalesData);
 
   // Filters
@@ -320,22 +324,28 @@ export default function CashierSalesView() {
     );
   };
 
-  const handleDownloadReceipt = (sale: SaleRecord) => {
-    const itemsFormatted = sale.items
-      .map((item, idx) => {
-        const num = `${idx + 1}.`.padEnd(4, ' ');
-        const name = item.product.padEnd(32, ' ').substring(0, 32);
-        const qty = `Qty: ${item.quantity}`.padEnd(10, ' ');
-        const price = `@ ${formatTZS(item.unitPrice)}`.padEnd(18, ' ');
-        const total = `= ${formatTZS(item.total)}`;
-        return `  ${num} ${name} ${qty} ${price} ${total}`;
-      })
-      .join('\n');
+  const handleDownloadReceipt = async (sale: SaleRecord) => {
+    try {
+      showToast(`Downloading Official PDF Receipt for ${sale.id}...`);
+      await posService.downloadReceiptPdf(sale.id, `Receipt-${sale.id}.pdf`, sale);
+      showToast(`PDF Receipt ${sale.id} downloaded successfully!`);
+    } catch {
+      // Fallback to text receipt format
+      const itemsFormatted = sale.items
+        .map((item, idx) => {
+          const num = `${idx + 1}.`.padEnd(4, ' ');
+          const name = item.product.padEnd(32, ' ').substring(0, 32);
+          const qty = `Qty: ${item.quantity}`.padEnd(10, ' ');
+          const price = `@ ${formatTZS(item.unitPrice)}`.padEnd(18, ' ');
+          const total = `= ${formatTZS(item.total)}`;
+          return `  ${num} ${name} ${qty} ${price} ${total}`;
+        })
+        .join('\n');
 
-    const textContent = `========================================================================
-                         TZA MART TANZANIA
-                 Mlimani City Mall, Dar es Salaam
-             TIN: 102-394-857   |   VRN: 40012983-Z
+      const textContent = `========================================================================
+                           ${settings.storeName.toUpperCase()}
+                    ${settings.branchName}
+                TIN: ${settings.tin}   |   VRN: ${settings.vrn}
 ========================================================================
 Sale Receipt No : ${sale.id}
 Date & Time     : ${sale.date} ${sale.time}
@@ -360,17 +370,18 @@ Fiscal Device   : ${sale.fiscalDevice}
 Z-Report Number : ${sale.zNumber}
 Security Key    : ${sale.verificationCode}
 ========================================================================
-            Asante kwa kununua TZA Mart Tanzania! Karibu tena.
+            Asante kwa kununua ${settings.storeName}! Karibu tena.
 ========================================================================`;
 
-    const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `Receipt-${sale.id}.txt`;
-    link.click();
-    URL.revokeObjectURL(url);
-    showToast(`Receipt ${sale.id} downloaded!`);
+      const blob = new Blob([textContent], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Receipt-${sale.id}.txt`;
+      link.click();
+      URL.revokeObjectURL(url);
+      showToast(`Receipt ${sale.id} downloaded!`);
+    }
   };
 
   const hasActiveFilters = searchQuery !== '' || cashierFilter !== 'ALL' || paymentMethodFilter !== 'ALL' || fiscalStatusFilter !== 'ALL' || datePreset !== 'ALL';
@@ -662,105 +673,149 @@ Security Key    : ${sale.verificationCode}
 
       {/* FISCAL RECEIPT MODAL */}
       {selectedSale && (
-        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 sm:p-7 shadow-2xl border border-slate-100 space-y-4 animate-in fade-in zoom-in duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
+          <div className="bg-white/95 backdrop-blur-2xl rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-white text-slate-800 space-y-5 my-auto max-h-[92vh] overflow-y-auto print:max-h-none print:shadow-none print:border-none print:p-0">
+            {/* RECEIPT TOOLBAR */}
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3.5 print:hidden">
               <div className="flex items-center space-x-2">
-                <Receipt className="w-5 h-5 text-[#4f46e5]" />
-                <h3 className="text-base font-black text-slate-900">Tax Invoice / Fiscal Receipt</h3>
+                <div className="w-9 h-9 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
+                  <Receipt className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-extrabold text-sm text-slate-900">Sale Transaction Receipt</h3>
+                  <p className="text-[11px] font-medium text-emerald-600">Official Supermarket & TRA Fiscal Record</p>
+                </div>
               </div>
               <button
                 onClick={() => setSelectedSale(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl cursor-pointer"
+                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-all cursor-pointer"
+                title="Close Receipt"
               >
-                <X className="w-4 h-4" />
+                <X className="w-5 h-5" />
               </button>
             </div>
 
-            <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-4 font-mono text-xs text-slate-700 space-y-3">
-              <div className="text-center border-b border-dashed border-slate-300 pb-3">
-                <p className="font-extrabold text-sm text-slate-900">TZA MART TANZANIA</p>
-                <p className="text-[11px] text-slate-500">Mlimani City Mall, Dar es Salaam</p>
-                <p className="text-[10px] text-slate-400 mt-1">TIN: 102-394-857 | VRN: 40012983-Z</p>
-              </div>
-
-              <div className="space-y-1 text-[11px]">
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Receipt No:</span>
-                  <span className="font-bold text-slate-900">{selectedSale.id}</span>
+            {/* CLEAN PRINTABLE RECEIPT CONTENT */}
+            <div id="sales-printable-receipt" className="space-y-4 font-sans bg-white p-4 sm:p-5 rounded-2xl border border-slate-100">
+              {/* STORE HEADER */}
+              <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-300">
+                <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-sky-400 rounded-xl mx-auto flex items-center justify-center text-white shadow-sm mb-1.5">
+                  <ShoppingCart className="w-5 h-5" />
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Date & Time:</span>
-                  <span>{selectedSale.date} {selectedSale.time}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Cashier:</span>
-                  <span>{selectedSale.cashier}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Customer:</span>
-                  <span>{selectedSale.customer}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-slate-500">Payment Mode:</span>
-                  <span className="font-bold text-slate-800">{selectedSale.paymentMethod} {selectedSale.provider ? `(${selectedSale.provider})` : ''}</span>
+                <h2 className="font-black text-lg text-slate-900 tracking-tight">TZA MART TANZANIA</h2>
+                <p className="text-xs text-slate-600 font-medium">Mlimani City Mall, Sam Nujoma Road, Dar es Salaam</p>
+                <div className="text-[11px] text-slate-500 font-mono flex items-center justify-center space-x-2 pt-0.5">
+                  <span>TIN: <strong className="text-slate-700">102-394-857</strong></span>
+                  <span>•</span>
+                  <span>VRN: <strong className="text-slate-700">40012983-Z</strong></span>
                 </div>
               </div>
 
-              <div className="border-t border-dashed border-slate-300 pt-2 space-y-1.5">
-                <p className="font-bold text-[11px] text-slate-900 mb-1">Purchased Items:</p>
-                {selectedSale.items.map((it, idx) => (
-                  <div key={idx} className="flex justify-between text-[11px]">
-                    <span className="truncate max-w-[180px]">{it.quantity}x {it.product}</span>
-                    <span className="font-bold">{formatTZS(it.total)}</span>
+              {/* TRANSACTION METADATA */}
+              <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs">
+                <div className="grid grid-cols-2 gap-2 text-[11px]">
+                  <div>
+                    <span className="text-slate-400 font-medium">Receipt No:</span>
+                    <p className="font-bold text-slate-900 font-mono">{selectedSale.id}</p>
                   </div>
-                ))}
-              </div>
-
-              <div className="border-t border-dashed border-slate-300 pt-2 space-y-1">
-                <div className="flex justify-between text-[11px]">
-                  <span>Subtotal (Net):</span>
-                  <span>{formatTZS(selectedSale.subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-[11px]">
-                  <span>VAT (18% Included):</span>
-                  <span>{formatTZS(selectedSale.tax)}</span>
-                </div>
-                <div className="flex justify-between text-sm font-black text-slate-900 pt-1 border-t border-slate-200">
-                  <span>Grand Total:</span>
-                  <span className="text-[#4f46e5]">{formatTZS(selectedSale.total)}</span>
+                  <div className="text-right">
+                    <span className="text-slate-400 font-medium">Date & Time:</span>
+                    <p className="font-bold text-slate-900">{selectedSale.date} {selectedSale.time}</p>
+                  </div>
+                  <div>
+                    <span className="text-slate-400 font-medium">Cashier:</span>
+                    <p className="font-bold text-slate-900 truncate">{selectedSale.cashier}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-slate-400 font-medium">Payment Mode:</span>
+                    <p className="font-bold text-slate-900">{selectedSale.paymentMethod} {selectedSale.provider ? `(${selectedSale.provider})` : ''}</p>
+                  </div>
                 </div>
               </div>
 
-              {/* TRA VFD DETAILS */}
-              <div className="bg-white border border-slate-200 p-2.5 rounded-xl text-[10px] space-y-1">
-                <div className="flex items-center space-x-1.5 text-emerald-700 font-extrabold">
-                  <ShieldCheck className="w-3.5 h-3.5" />
-                  <span>TRA VFD VERIFIED RECEIPT</span>
+              {/* ITEM TABLE */}
+              <div className="pt-1">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="text-slate-400 font-bold border-b border-slate-200 pb-1.5 text-[10px] uppercase">
+                      <th className="pb-1.5">Item</th>
+                      <th className="pb-1.5 text-center">Qty</th>
+                      <th className="pb-1.5 text-right">Price</th>
+                      <th className="pb-1.5 text-right">Total</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100 font-medium text-slate-800 text-[11px]">
+                    {selectedSale.items.map((it, idx) => (
+                      <tr key={idx}>
+                        <td className="py-2 pr-2">
+                          <p className="font-bold text-slate-900">{it.product}</p>
+                        </td>
+                        <td className="py-2 text-center font-bold text-slate-900">{it.quantity}</td>
+                        <td className="py-2 text-right font-mono text-slate-600">{formatTZS(it.unitPrice)}</td>
+                        <td className="py-2 text-right font-bold text-slate-900 font-mono">{formatTZS(it.total)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* FINANCIAL TOTALS */}
+              <div className="border-t border-slate-200 pt-2.5 space-y-1 text-xs">
+                <div className="flex justify-between text-slate-600 text-[11px]">
+                  <span>Subtotal (Excl. VAT):</span>
+                  <span className="font-mono font-bold text-slate-900">{formatTZS(selectedSale.subtotal)}</span>
                 </div>
-                <p><span className="text-slate-400">VFD Receipt:</span> {selectedSale.fiscalReceiptNo}</p>
-                <p><span className="text-slate-400">Device ID:</span> {selectedSale.fiscalDevice}</p>
-                <p><span className="text-slate-400">Z-Number:</span> {selectedSale.zNumber}</p>
-                <p><span className="text-slate-400">Verification Code:</span> {selectedSale.verificationCode}</p>
+                <div className="flex justify-between text-slate-500 text-[11px]">
+                  <span>18% TRA VAT (Included):</span>
+                  <span className="font-mono text-slate-700">{formatTZS(selectedSale.tax)}</span>
+                </div>
+                <div className="flex justify-between font-black text-sm py-1.5 border-t border-b border-slate-200 text-slate-900 bg-slate-50 px-2 rounded-lg my-1">
+                  <span>TOTAL PAID:</span>
+                  <span className="font-mono text-blue-600 text-base">{formatTZS(selectedSale.total)}</span>
+                </div>
+              </div>
+
+              {/* COMPACT TRA FISCAL VERIFICATION */}
+              <div className="bg-emerald-50 rounded-xl p-2.5 border border-emerald-200 text-[11px] space-y-1">
+                <div className="flex items-center justify-between text-emerald-800 font-bold text-[10px]">
+                  <span className="flex items-center">
+                    <ShieldCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                    TRA ELECTRONIC FISCAL RECEIPT
+                  </span>
+                  <span className="text-emerald-700 font-mono font-black">VERIFIED</span>
+                </div>
+                <div className="flex justify-between text-slate-600 text-[10px] font-mono">
+                  <span>VFD No: {selectedSale.fiscalReceiptNo}</span>
+                  <span>EFD: {selectedSale.fiscalDevice}</span>
+                </div>
+                <div className="text-center bg-slate-900 text-emerald-400 font-mono text-[10px] py-1 rounded font-bold tracking-wider">
+                  {selectedSale.verificationCode}
+                </div>
+              </div>
+
+              {/* FOOTER */}
+              <div className="text-center text-slate-400 text-[10.5px] pt-1">
+                <p className="font-bold text-slate-700">Asante kwa kununua nasi • Thank you for shopping with us!</p>
               </div>
             </div>
 
-            <div className="flex space-x-2 pt-1">
+            {/* MODAL BOTTOM ACTIONS */}
+            <div className="flex space-x-2 pt-2 border-t border-slate-100 print:hidden">
+              <button
+                type="button"
+                onClick={() => posService.printReceiptOnly('sales-printable-receipt')}
+                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-2xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
+              >
+                <Printer className="w-4 h-4 text-slate-700" />
+                <span>Print Receipt</span>
+              </button>
               <button
                 type="button"
                 onClick={() => handleDownloadReceipt(selectedSale)}
-                className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer flex items-center justify-center space-x-1.5"
+                className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-sky-500 hover:from-blue-700 hover:to-sky-600 text-white font-bold text-xs rounded-2xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Download TXT</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="flex-1 py-2.5 bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white rounded-xl text-xs font-bold cursor-pointer shadow-md shadow-indigo-500/20 flex items-center justify-center space-x-1.5"
-              >
-                <Printer className="w-4 h-4" />
-                <span>Print Receipt</span>
+                <span>Download PDF Receipt</span>
               </button>
             </div>
           </div>

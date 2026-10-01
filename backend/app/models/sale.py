@@ -37,6 +37,10 @@ class Sale(db.Model):
     fiscal_date = db.Column(db.String(30), default=lambda: datetime.utcnow().strftime('%Y-%m-%d'))
     fiscal_time = db.Column(db.String(30), default=lambda: datetime.utcnow().strftime('%H:%M:%S'))
 
+    # PDF Receipt Storage (Binary Byte Data)
+    pdf_data = db.Column(db.LargeBinary, nullable=True)
+    pdf_filename = db.Column(db.String(255), nullable=True)
+
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     # Relationships
@@ -46,28 +50,51 @@ class Sale(db.Model):
         return {
             'id': self.sale_number,
             'dbId': self.id,
+            'sale_number': self.sale_number,
+            'saleNumber': self.sale_number,
+            'receiptNo': self.sale_number,
             'date': self.date.strftime('%Y-%m-%d') if self.date else self.created_at.strftime('%Y-%m-%d'),
             'time': self.time_str or self.created_at.strftime('%H:%M:%S'),
             'cashier': self.cashier_name,
+            'cashier_name': self.cashier_name,
             'customer': self.customer_name,
+            'customer_name': self.customer_name,
             'customerPhone': self.customer_phone,
+            'customer_phone': self.customer_phone,
             'itemsCount': self.items_count or len(self.items),
+            'items_count': self.items_count or len(self.items),
             'subtotal': self.subtotal,
             'tax': self.tax,
             'total': self.total,
             'amountPaid': self.amount_paid,
+            'amount_paid': self.amount_paid,
             'changeAmount': self.change_amount,
+            'change_amount': self.change_amount,
             'paymentMethod': self.payment_method,
+            'payment_method': self.payment_method,
             'provider': self.payment_provider,
+            'payment_provider': self.payment_provider,
             'paymentStatus': self.payment_status,
+            'payment_status': self.payment_status,
             'paymentRef': self.payment_ref,
+            'payment_ref': self.payment_ref,
             'fiscalStatus': self.fiscal_status,
+            'fiscal_status': self.fiscal_status,
             'fiscalReceiptNo': self.fiscal_receipt_no,
+            'fiscal_receipt_no': self.fiscal_receipt_no,
             'fiscalDevice': self.fiscal_device,
+            'fiscal_device': self.fiscal_device,
             'zNumber': self.z_number,
+            'z_number': self.z_number,
             'verificationCode': self.verification_code,
+            'verification_code': self.verification_code,
             'fiscalDate': self.fiscal_date,
+            'fiscal_date': self.fiscal_date,
             'fiscalTime': self.fiscal_time,
+            'fiscal_time': self.fiscal_time,
+            'hasPdf': bool(self.pdf_data),
+            'pdfFilename': self.pdf_filename or f"Receipt-{self.sale_number}.pdf",
+            'pdfDownloadUrl': f"/api/sales/{self.sale_number}/receipt/pdf",
             'items': [item.to_dict() for item in self.items],
             'createdAt': self.created_at.strftime('%Y-%m-%d %H:%M:%S') if self.created_at else None
         }

@@ -3,11 +3,13 @@ import {
   ShoppingCart, Plus, Trash2, Printer, Download, FileText,
   DollarSign, CreditCard, Smartphone,
   AlertCircle, ScanBarcode, X, Calendar, Clock,
-  HelpCircle, ArrowRight, User, CheckCircle2, ShieldCheck, Loader2, RefreshCw
+  HelpCircle, ArrowRight, User, CheckCircle2, ShieldCheck, Loader2, RefreshCw,
+  RotateCcw
 } from 'lucide-react';
 import { type PaymentState, type MobileMoneyProvider } from '../../services/mockPaymentService';
 import posService, { type POSProductItem } from '../../services/posService';
 import { inventoryService, type InventoryItem } from '../../services/inventoryService';
+import { useSettings } from '../../context/SettingsContext';
 
 export type POSProduct = POSProductItem;
 
@@ -43,6 +45,7 @@ interface CashierPOSViewProps {
 }
 
 export default function CashierPOSView({ onSaleComplete, externalCartItem }: CashierPOSViewProps) {
+  const { settings } = useSettings();
   // Live Products & Categories from Backend Inventory
   const [productsList, setProductsList] = useState<POSProduct[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState<boolean>(false);
@@ -69,7 +72,42 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
   // Alerts & Modals
   const [barcodeError, setBarcodeError] = useState<string | null>(null);
   const [stockError, setStockError] = useState<string | null>(null);
-  const [receiptModal, setReceiptModal] = useState<any | null>(null);
+  const [receiptModal, setReceiptModalState] = useState<any | null>(() => {
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const urlReceipt = urlParams.get('receipt');
+      const saved = localStorage.getItem('active_pos_receipt');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (!urlReceipt || parsed.receiptNo === urlReceipt) {
+          return parsed;
+        }
+      }
+      return null;
+    } catch {
+      return null;
+    }
+  });
+
+  const setReceiptModal = (data: any | null) => {
+    setReceiptModalState(data);
+    try {
+      if (data && data.receiptNo) {
+        localStorage.setItem('active_pos_receipt', JSON.stringify(data));
+        const url = new URL(window.location.href);
+        url.searchParams.set('receipt', data.receiptNo);
+        window.history.replaceState({}, '', url.toString());
+      } else {
+        localStorage.removeItem('active_pos_receipt');
+        const url = new URL(window.location.href);
+        url.searchParams.delete('receipt');
+        window.history.replaceState({}, '', url.toString());
+      }
+    } catch (e) {
+      console.error('Failed to sync receipt in localStorage / URL:', e);
+    }
+  };
+
   const [downloadNotice, setDownloadNotice] = useState<string | null>(null);
 
   // Live Clock State
@@ -276,29 +314,36 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
 
         const now = new Date();
         const receipt = {
-          supermarketName: 'TZA MART TANZANIA',
-          storeBranch: 'Mlimani City Mall, Sam Nujoma Road, Dar es Salaam',
-          tin: '102-394-857',
-          vrn: '40012983-Z',
-          receiptNo: saleData?.sale_number || `SL-2026-${Math.floor(10000 + Math.random() * 90000)}`,
+          supermarketName: settings.storeName,
+          storeBranch: settings.branchName,
+          storeAddress: settings.storeAddress,
+          storePhone: settings.storePhone,
+          storeEmail: settings.storeEmail,
+          currency: settings.currency,
+          receiptHeaderTagline: settings.receiptHeaderTagline,
+          receiptFooter: settings.receiptFooter,
+          tin: settings.tin,
+          vrn: settings.vrn,
+          vatRate: settings.vatRate,
+          receiptNo: saleData?.sale_number || saleData?.saleNumber || saleData?.receiptNo || saleData?.id || `SALE-TZ-2026-${Math.floor(10000 + Math.random() * 90000)}`,
           date: saleData?.date || now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
           time: saleData?.time || currentTime,
-          cashier: saleData?.cashier_name || 'John Cashier (ID: C-104)',
-          customer: saleData?.customer_name || 'Walk-in Customer',
+          cashier: saleData?.cashier_name || saleData?.cashier || 'John Cashier (ID: C-104)',
+          customer: saleData?.customer_name || saleData?.customer || 'Walk-in Customer',
           items: [...cart],
           rawSubtotal,
           vatTax,
           grandTotal,
           paymentMethod: 'Cash',
           numericPaid,
-          cashChange: saleData?.change_amount ?? cashChange,
+          cashChange: saleData?.change_amount ?? saleData?.changeAmount ?? cashChange,
           fiscalInformation: {
             fiscalizationStatus: 'FISCALIZED / VERIFIED (TRA VFD)',
-            fiscalReceiptNo: saleData?.fiscal_receipt_no || `TRA-VFD-2026-${Math.floor(10000000 + Math.random() * 90000000)}`,
-            fiscalDevice: saleData?.fiscal_device || 'EFD-TZ-DAR-001',
-            verificationCode: saleData?.verification_code || `TRA-VFD-${Math.floor(10000 + Math.random() * 90000)}-TZ`,
-            fiscalDate: saleData?.fiscal_date || now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-            fiscalTime: saleData?.fiscal_time || currentTime,
+            fiscalReceiptNo: saleData?.fiscal_receipt_no || saleData?.fiscalReceiptNo || `TRA-VFD-2026-${Math.floor(10000000 + Math.random() * 90000000)}`,
+            fiscalDevice: saleData?.fiscal_device || saleData?.fiscalDevice || settings.vfdDeviceId,
+            verificationCode: saleData?.verification_code || saleData?.verificationCode || `TRA-VFD-${Math.floor(10000 + Math.random() * 90000)}-TZ`,
+            fiscalDate: saleData?.fiscal_date || saleData?.fiscalDate || now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+            fiscalTime: saleData?.fiscal_time || saleData?.fiscalTime || currentTime,
           },
         };
 
@@ -333,15 +378,22 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
 
         const now = new Date();
         const receipt = {
-          supermarketName: 'TZA MART TANZANIA',
-          storeBranch: 'Mlimani City Mall, Sam Nujoma Road, Dar es Salaam',
-          tin: '102-394-857',
-          vrn: '40012983-Z',
-          receiptNo: saleData?.sale_number || `SL-2026-${Math.floor(10000 + Math.random() * 90000)}`,
+          supermarketName: settings.storeName,
+          storeBranch: settings.branchName,
+          storeAddress: settings.storeAddress,
+          storePhone: settings.storePhone,
+          storeEmail: settings.storeEmail,
+          currency: settings.currency,
+          receiptHeaderTagline: settings.receiptHeaderTagline,
+          receiptFooter: settings.receiptFooter,
+          tin: settings.tin,
+          vrn: settings.vrn,
+          vatRate: settings.vatRate,
+          receiptNo: saleData?.sale_number || saleData?.saleNumber || saleData?.receiptNo || saleData?.id || `SALE-TZ-2026-${Math.floor(10000 + Math.random() * 90000)}`,
           date: saleData?.date || now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
           time: saleData?.time || currentTime,
-          cashier: saleData?.cashier_name || 'John Cashier (ID: C-104)',
-          customer: saleData?.customer_name || 'Walk-in Customer',
+          cashier: saleData?.cashier_name || saleData?.cashier || 'John Cashier (ID: C-104)',
+          customer: saleData?.customer_name || saleData?.customer || 'Walk-in Customer',
           items: [...cart],
           rawSubtotal,
           vatTax,
@@ -353,11 +405,11 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
           cashChange: 0,
           fiscalInformation: {
             fiscalizationStatus: 'FISCALIZED / VERIFIED (TRA VFD)',
-            fiscalReceiptNo: saleData?.fiscal_receipt_no || `TRA-VFD-2026-${Math.floor(10000000 + Math.random() * 90000000)}`,
-            fiscalDevice: saleData?.fiscal_device || 'EFD-TZ-DAR-001',
-            verificationCode: saleData?.verification_code || `TRA-VFD-${Math.floor(10000 + Math.random() * 90000)}-TZ`,
-            fiscalDate: saleData?.fiscal_date || now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-            fiscalTime: saleData?.fiscal_time || currentTime,
+            fiscalReceiptNo: saleData?.fiscal_receipt_no || saleData?.fiscalReceiptNo || `TRA-VFD-2026-${Math.floor(10000000 + Math.random() * 90000000)}`,
+            fiscalDevice: saleData?.fiscal_device || saleData?.fiscalDevice || settings.vfdDeviceId,
+            verificationCode: saleData?.verification_code || saleData?.verificationCode || `TRA-VFD-${Math.floor(10000 + Math.random() * 90000)}-TZ`,
+            fiscalDate: saleData?.fiscal_date || saleData?.fiscalDate || now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+            fiscalTime: saleData?.fiscal_time || saleData?.fiscalTime || currentTime,
           },
         };
 
@@ -392,15 +444,22 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
 
         const now = new Date();
         const receipt = {
-          supermarketName: 'TZA MART TANZANIA',
-          storeBranch: 'Mlimani City Mall, Sam Nujoma Road, Dar es Salaam',
-          tin: '102-394-857',
-          vrn: '40012983-Z',
-          receiptNo: saleData?.sale_number || `SL-2026-${Math.floor(10000 + Math.random() * 90000)}`,
+          supermarketName: settings.storeName,
+          storeBranch: settings.branchName,
+          storeAddress: settings.storeAddress,
+          storePhone: settings.storePhone,
+          storeEmail: settings.storeEmail,
+          currency: settings.currency,
+          receiptHeaderTagline: settings.receiptHeaderTagline,
+          receiptFooter: settings.receiptFooter,
+          tin: settings.tin,
+          vrn: settings.vrn,
+          vatRate: settings.vatRate,
+          receiptNo: saleData?.sale_number || saleData?.saleNumber || saleData?.receiptNo || saleData?.id || `SALE-TZ-2026-${Math.floor(10000 + Math.random() * 90000)}`,
           date: saleData?.date || now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
           time: saleData?.time || currentTime,
-          cashier: saleData?.cashier_name || 'John Cashier (ID: C-104)',
-          customer: saleData?.customer_name || 'Walk-in Customer',
+          cashier: saleData?.cashier_name || saleData?.cashier || 'John Cashier (ID: C-104)',
+          customer: saleData?.customer_name || saleData?.customer || 'Walk-in Customer',
           items: [...cart],
           rawSubtotal,
           vatTax,
@@ -411,11 +470,11 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
           cashChange: 0,
           fiscalInformation: {
             fiscalizationStatus: 'FISCALIZED / VERIFIED (TRA VFD)',
-            fiscalReceiptNo: saleData?.fiscal_receipt_no || `TRA-VFD-2026-${Math.floor(10000000 + Math.random() * 90000000)}`,
-            fiscalDevice: saleData?.fiscal_device || 'EFD-TZ-DAR-001',
-            verificationCode: saleData?.verification_code || `TRA-VFD-${Math.floor(10000 + Math.random() * 90000)}-TZ`,
-            fiscalDate: saleData?.fiscal_date || now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
-            fiscalTime: saleData?.fiscal_time || currentTime,
+            fiscalReceiptNo: saleData?.fiscal_receipt_no || saleData?.fiscalReceiptNo || `TRA-VFD-2026-${Math.floor(10000000 + Math.random() * 90000000)}`,
+            fiscalDevice: saleData?.fiscal_device || saleData?.fiscalDevice || settings.vfdDeviceId,
+            verificationCode: saleData?.verification_code || saleData?.verificationCode || `TRA-VFD-${Math.floor(10000 + Math.random() * 90000)}-TZ`,
+            fiscalDate: saleData?.fiscal_date || saleData?.fiscalDate || now.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' }),
+            fiscalTime: saleData?.fiscal_time || saleData?.fiscalTime || currentTime,
           },
         };
 
@@ -431,6 +490,15 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
       setPaymentState('Failed');
       setPaymentErrorMessage(err.response?.data?.message || err.message || 'Payment processing failed. Please try again.');
     }
+  };
+
+  const handleCancelOrModifySale = () => {
+    if (cart.length === 0 && receiptModal?.items && receiptModal.items.length > 0) {
+      setCart(receiptModal.items);
+    }
+    setReceiptModal(null);
+    setPaymentState('Idle');
+    setPaymentErrorMessage(null);
   };
 
   const handleFinishSale = () => {
@@ -1026,123 +1094,96 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
 
       {/* COMPLETED SALE & TRA FISCAL RECEIPT MODAL */}
       {receiptModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white/95 backdrop-blur-2xl rounded-3xl p-6 md:p-8 max-w-xl w-full shadow-2xl border border-white text-slate-800 space-y-6 my-auto max-h-[92vh] overflow-y-auto print:max-h-none print:shadow-none print:border-none print:p-0">
-            {/* RECEIPT TOOLBAR */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-4 print:hidden">
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4">
+          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden">
+            {/* 1. STICKY TOP HEADER */}
+            <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 border-b border-slate-100 flex-shrink-0 bg-white print:hidden">
               <div className="flex items-center space-x-2">
-                <div className="w-9 h-9 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
-                  <CheckCircle2 className="w-5 h-5" />
+                <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
+                  <CheckCircle2 className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm text-slate-900">Sale Transaction Receipt</h3>
-                  <p className="text-[11px] font-medium text-emerald-600">Official Supermarket & TRA Fiscal Record</p>
+                  <h3 className="font-extrabold text-sm text-slate-900 leading-tight">Sale Transaction Receipt</h3>
+                  <p className="text-[10.5px] font-medium text-emerald-600 leading-tight">Official Supermarket & TRA Fiscal Record</p>
                 </div>
               </div>
 
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => window.print()}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all flex items-center cursor-pointer"
-                  title="Print Receipt"
-                >
-                  <Printer className="w-3.5 h-3.5 mr-1 text-slate-600" /> Print
-                </button>
-
-                <button
-                  onClick={() => {
-                    setDownloadNotice(`Downloading PDF Fiscal Receipt (${receiptModal.receiptNo})...`);
-                    setTimeout(() => setDownloadNotice(null), 3500);
-                  }}
-                  className="px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-600 font-bold text-xs rounded-xl transition-all flex items-center cursor-pointer"
-                  title="Download PDF Receipt"
-                >
-                  <Download className="w-3.5 h-3.5 mr-1 text-blue-600" /> Download PDF
-                </button>
-
-                <button
-                  onClick={handleFinishSale}
-                  className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-all cursor-pointer"
-                  title="Close Receipt"
-                >
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
+              <button
+                onClick={handleFinishSale}
+                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-all cursor-pointer"
+                title="Close Receipt"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
 
             {/* DOWNLOAD NOTICE TOAST */}
             {downloadNotice && (
-              <div className="p-3 bg-blue-500 text-white rounded-2xl text-xs font-bold flex items-center justify-between shadow-lg print:hidden">
+              <div className="mx-4 mt-3 p-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center justify-between shadow-sm flex-shrink-0 print:hidden">
                 <div className="flex items-center space-x-2">
-                  <Download className="w-4 h-4 animate-bounce" />
+                  <Download className="w-3.5 h-3.5 animate-bounce" />
                   <span>{downloadNotice}</span>
                 </div>
-                <span className="text-[10px] bg-white/20 px-2 py-0.5 rounded-full">PDF Download</span>
+                <span className="text-[9px] bg-white/20 px-2 py-0.5 rounded-full font-mono">PDF</span>
               </div>
             )}
 
-            {/* PRINTABLE RECEIPT CONTENT */}
-            <div className="space-y-6 font-sans">
-              <div className="text-center space-y-1 pb-4 border-b border-dashed border-slate-300">
-                <div className="w-12 h-12 bg-gradient-to-tr from-blue-600 to-sky-400 rounded-2xl mx-auto flex items-center justify-center text-white shadow-md mb-2">
-                  <ShoppingCart className="w-6 h-6" />
-                </div>
-                <h2 className="font-black text-xl text-slate-900 tracking-tight">{receiptModal.supermarketName}</h2>
-                <p className="text-xs text-slate-600 font-medium">{receiptModal.storeBranch}</p>
-                <div className="text-[11px] text-slate-500 font-mono flex items-center justify-center space-x-3 pt-1">
-                  <span>TIN: <strong className="text-slate-700">{receiptModal.tin}</strong></span>
-                  <span>|</span>
-                  <span>VRN: <strong className="text-slate-700">{receiptModal.vrn}</strong></span>
-                </div>
-              </div>
-
-              {/* 1. NORMAL SALE INFORMATION */}
-              <div className="bg-slate-50/80 rounded-2xl p-4 border border-slate-200/80 space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-200/80 pb-2">
-                  <span className="text-xs font-black text-slate-800 uppercase tracking-wider flex items-center">
-                    <FileText className="w-3.5 h-3.5 mr-1.5 text-blue-600" />
-                    1. Normal Sale Information
-                  </span>
-                  <span className="px-2.5 py-0.5 bg-blue-100 text-blue-700 text-[10px] font-black rounded-full font-mono">
-                    {receiptModal.receiptNo}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                  <div>
-                    <p className="text-slate-400 font-medium">Sale Number</p>
-                    <p className="font-bold text-slate-900 font-mono">{receiptModal.receiptNo}</p>
+            {/* 2. SCROLLABLE CLEAN PRINTABLE RECEIPT CONTENT */}
+            <div className="p-4 sm:p-5 overflow-y-auto flex-1 custom-scrollbar">
+              <div id="printable-receipt" className="space-y-3.5 font-sans bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80">
+                {/* STORE HEADER */}
+                <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-300">
+                  <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-sky-400 rounded-xl mx-auto flex items-center justify-center text-white shadow-sm mb-1.5">
+                    <ShoppingCart className="w-5 h-5" />
                   </div>
-                  <div>
-                    <p className="text-slate-400 font-medium">Date</p>
-                    <p className="font-bold text-slate-900">{receiptModal.date}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 font-medium">Time</p>
-                    <p className="font-bold text-slate-900">{receiptModal.time}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 font-medium">Cashier</p>
-                    <p className="font-bold text-slate-900 truncate">{receiptModal.cashier}</p>
+                  <h2 className="font-black text-lg text-slate-900 tracking-tight">{receiptModal.supermarketName}</h2>
+                  <p className="text-xs text-slate-600 font-medium">{receiptModal.storeBranch}</p>
+                  <div className="text-[11px] text-slate-500 font-mono flex items-center justify-center space-x-2 pt-0.5">
+                    <span>TIN: <strong className="text-slate-700">{receiptModal.tin}</strong></span>
+                    <span>•</span>
+                    <span>VRN: <strong className="text-slate-700">{receiptModal.vrn}</strong></span>
                   </div>
                 </div>
 
-                <div className="pt-2">
+                {/* TRANSACTION METADATA */}
+                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs">
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-400 font-medium">Receipt No:</span>
+                      <p className="font-bold text-slate-900 font-mono">{receiptModal.receiptNo}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 font-medium">Date & Time:</span>
+                      <p className="font-bold text-slate-900">{receiptModal.date} {receiptModal.time}</p>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 font-medium">Cashier:</span>
+                      <p className="font-bold text-slate-900 truncate">{receiptModal.cashier}</p>
+                    </div>
+                    <div className="text-right">
+                      <span className="text-slate-400 font-medium">Payment Mode:</span>
+                      <p className="font-bold text-slate-900">{receiptModal.paymentMethod}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ITEM TABLE */}
+                <div className="pt-1">
                   <table className="w-full text-left text-xs">
                     <thead>
-                      <tr className="text-slate-400 font-bold border-b border-slate-200 pb-2 text-[10px] uppercase">
-                        <th className="pb-1.5">Product</th>
+                      <tr className="text-slate-400 font-bold border-b border-slate-200 pb-1.5 text-[10px] uppercase">
+                        <th className="pb-1.5">Item</th>
                         <th className="pb-1.5 text-center">Qty</th>
                         <th className="pb-1.5 text-right">Price</th>
                         <th className="pb-1.5 text-right">Total</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200/60 font-medium text-slate-800 text-[11px]">
+                    <tbody className="divide-y divide-slate-100 font-medium text-slate-800 text-[11px]">
                       {receiptModal.items.map((item: CartItem) => (
                         <tr key={item.product.id}>
                           <td className="py-2 pr-2">
                             <p className="font-bold text-slate-900">{item.product.name}</p>
-                            <p className="text-[10px] text-slate-400 font-mono">SKU: {item.product.sku}</p>
+                            {item.product.sku && <span className="text-[10px] text-slate-400 font-mono">{item.product.sku}</span>}
                           </td>
                           <td className="py-2 text-center font-bold text-slate-900">{item.quantity}</td>
                           <td className="py-2 text-right font-mono text-slate-600">{formatCurrency(item.product.price)}</td>
@@ -1153,133 +1194,96 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
                   </table>
                 </div>
 
-                <div className="border-t border-slate-200 pt-3 space-y-1.5 text-xs font-medium">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Subtotal</span>
+                {/* FINANCIAL TOTALS */}
+                <div className="border-t border-slate-200 pt-2.5 space-y-1 text-xs">
+                  <div className="flex justify-between text-slate-600 text-[11px]">
+                    <span>Subtotal (Excl. VAT):</span>
                     <span className="font-mono font-bold text-slate-900">{formatCurrency(receiptModal.rawSubtotal)}</span>
                   </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>18% TRA VAT Tax</span>
+                  <div className="flex justify-between text-slate-500 text-[11px]">
+                    <span>{receiptModal.vatRate || '18'}% TRA VAT (Included):</span>
                     <span className="font-mono text-slate-700">{formatCurrency(receiptModal.vatTax)}</span>
                   </div>
-                  <div className="flex justify-between font-black text-sm pt-2 border-t border-slate-300 text-slate-900">
-                    <span>Grand Total</span>
+                  <div className="flex justify-between font-black text-sm py-1.5 border-t border-b border-slate-200 text-slate-900 bg-slate-50 px-2 rounded-lg my-1">
+                    <span>TOTAL PAID:</span>
                     <span className="font-mono text-blue-600 text-base">{formatCurrency(receiptModal.grandTotal)}</span>
                   </div>
-                </div>
-
-                <div className="bg-white rounded-xl p-3 border border-slate-200 text-xs space-y-1">
-                  <div className="flex justify-between items-center">
-                    <span className="text-slate-500 font-medium">Payment Method:</span>
-                    <span className="font-black text-slate-900 px-2 py-0.5 bg-slate-100 rounded-md">
-                      {receiptModal.paymentMethod}
-                    </span>
-                  </div>
                   {receiptModal.paymentMethod === 'Cash' && (
-                    <>
-                      <div className="flex justify-between text-slate-600 text-[11px] pt-1">
-                        <span>Amount Received:</span>
-                        <span className="font-mono font-bold">{formatCurrency(receiptModal.numericPaid)}</span>
-                      </div>
-                      <div className="flex justify-between text-emerald-600 text-[11px] font-bold">
-                        <span>Change Given:</span>
-                        <span className="font-mono">{formatCurrency(receiptModal.cashChange)}</span>
-                      </div>
-                    </>
+                    <div className="flex justify-between text-[11px] text-slate-600 pt-0.5 px-1">
+                      <span>Received: <strong className="font-mono text-slate-900">{formatCurrency(receiptModal.numericPaid)}</strong></span>
+                      <span>Change: <strong className="font-mono text-emerald-600">{formatCurrency(receiptModal.cashChange)}</strong></span>
+                    </div>
                   )}
                 </div>
-              </div>
 
-              {/* 2. TRA VFD FISCAL INFORMATION */}
-              <div className="bg-emerald-50/80 rounded-2xl p-4 border border-emerald-200/90 shadow-sm space-y-4">
-                <div className="flex items-center justify-between border-b border-emerald-200/80 pb-2">
-                  <div className="flex items-center space-x-1.5">
-                    <ShieldCheck className="w-4 h-4 text-emerald-700" />
-                    <span className="text-xs font-black text-emerald-950 uppercase tracking-wider">
-                      2. TRA VFD Fiscal Information
+                {/* COMPACT TRA FISCAL VERIFICATION */}
+                <div className="bg-emerald-50 rounded-xl p-2.5 border border-emerald-200 text-[11px] space-y-1">
+                  <div className="flex items-center justify-between text-emerald-800 font-bold text-[10px]">
+                    <span className="flex items-center">
+                      <ShieldCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" />
+                      TRA ELECTRONIC FISCAL RECEIPT
                     </span>
+                    <span className="text-emerald-700 font-mono font-black">VERIFIED</span>
                   </div>
-                  <span className="px-2.5 py-0.5 bg-emerald-600 text-white text-[10px] font-extrabold rounded-full shadow-2xs">
-                    {receiptModal.fiscalInformation.fiscalizationStatus}
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 text-[11px]">
-                  <div>
-                    <p className="text-emerald-800/70 font-medium">Fiscal Status</p>
-                    <p className="font-extrabold text-emerald-900">Fiscalized & Transmitted</p>
+                  <div className="flex justify-between text-slate-600 text-[10px] font-mono">
+                    <span>VFD No: {receiptModal.fiscalInformation?.fiscalReceiptNo || receiptModal.receiptNo}</span>
+                    <span>EFD: {receiptModal.fiscalInformation?.fiscalDevice || receiptModal.fiscalDevice || settings.vfdDeviceId}</span>
                   </div>
-                  <div>
-                    <p className="text-emerald-800/70 font-medium">Fiscal Receipt No.</p>
-                    <p className="font-bold text-emerald-950 font-mono">{receiptModal.fiscalInformation.fiscalReceiptNo}</p>
-                  </div>
-                  <div>
-                    <p className="text-emerald-800/70 font-medium">Fiscal Device ID</p>
-                    <p className="font-bold text-emerald-950 font-mono">{receiptModal.fiscalInformation.fiscalDevice}</p>
-                  </div>
-                  <div>
-                    <p className="text-emerald-800/70 font-medium">Fiscal Date</p>
-                    <p className="font-bold text-emerald-950">{receiptModal.fiscalInformation.fiscalDate}</p>
-                  </div>
-                  <div>
-                    <p className="text-emerald-800/70 font-medium">Fiscal Time</p>
-                    <p className="font-bold text-emerald-950">{receiptModal.fiscalInformation.fiscalTime}</p>
-                  </div>
-                  <div>
-                    <p className="text-emerald-800/70 font-medium">Tax Authority</p>
-                    <p className="font-bold text-emerald-950">TRA Tanzania</p>
+                  <div className="text-center bg-slate-900 text-emerald-400 font-mono text-[10px] py-1 rounded font-bold tracking-wider">
+                    {receiptModal.fiscalInformation?.verificationCode || `TRA-VFD-${Math.floor(10000 + Math.random() * 90000)}-TZ`}
                   </div>
                 </div>
 
-                <div className="bg-white rounded-xl p-3 border border-emerald-200/90 shadow-2xs space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[10px] font-black text-emerald-900 uppercase tracking-wider">
-                      Fiscal Verification Code (VFD Security Key)
-                    </span>
-                    <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded-md">
-                      TRA Official
-                    </span>
-                  </div>
-
-                  <div className="p-2.5 bg-slate-900 text-emerald-400 font-mono text-center rounded-lg text-xs tracking-widest font-black break-all shadow-inner border border-slate-800">
-                    {receiptModal.fiscalInformation.verificationCode}
-                  </div>
+                {/* FOOTER */}
+                <div className="text-center text-slate-400 text-[10.5px] pt-1">
+                  <p className="font-bold text-slate-700">{receiptModal.receiptFooter || 'Asante kwa kununua nasi • Thank you for shopping with us!'}</p>
                 </div>
-              </div>
-
-              <div className="text-center text-slate-400 text-[11px] space-y-0.5 pt-2">
-                <p className="font-bold text-slate-700">Asante kwa kununua TZA Mart Tanzania! Karibu tena.</p>
-                <p className="text-[10px]">Powered by TZA Mart POS & TRA VFD Middleware System v2.4</p>
               </div>
             </div>
 
-            {/* MODAL ACTIONS */}
-            <div className="pt-4 border-t border-slate-100 flex flex-col sm:flex-row gap-2 print:hidden">
+            {/* 3. STICKY BOTTOM ACTION BAR */}
+            <div className="px-4 sm:px-6 py-3 border-t border-slate-100 bg-slate-50/90 backdrop-blur-sm flex flex-wrap sm:flex-nowrap gap-2 flex-shrink-0 print:hidden">
               <button
-                onClick={() => window.print()}
-                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-2xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
+                onClick={handleCancelOrModifySale}
+                className="flex-1 min-w-[110px] py-2.5 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
+                title="Cancel receipt and return to cart to add/remove items"
               >
-                <Printer className="w-4 h-4 text-slate-700" />
-                <span>Print Receipt</span>
+                <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
+                <span>Modify / Back</span>
               </button>
 
               <button
-                onClick={() => {
-                  setDownloadNotice(`Downloading PDF Fiscal Receipt (${receiptModal.receiptNo})...`);
-                  setTimeout(() => setDownloadNotice(null), 3500);
-                }}
-                className="flex-1 py-3 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-2xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
+                onClick={() => posService.printReceiptOnly('printable-receipt')}
+                className="flex-1 min-w-[90px] py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
               >
-                <Download className="w-4 h-4 text-blue-600" />
+                <Printer className="w-3.5 h-3.5 text-slate-700" />
+                <span>Print</span>
+              </button>
+
+              <button
+                onClick={async () => {
+                  try {
+                    setDownloadNotice(`Downloading Official PDF Receipt (${receiptModal.receiptNo})...`);
+                    await posService.downloadReceiptPdf(receiptModal.receiptNo, `Receipt-${receiptModal.receiptNo}.pdf`, receiptModal);
+                    setTimeout(() => setDownloadNotice(null), 3000);
+                  } catch (err) {
+                    console.error('Failed to download PDF:', err);
+                    setDownloadNotice(`Failed to download PDF receipt. Please try again.`);
+                    setTimeout(() => setDownloadNotice(null), 4000);
+                  }
+                }}
+                className="flex-1 min-w-[110px] py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
+              >
+                <Download className="w-3.5 h-3.5 text-blue-600" />
                 <span>Download PDF</span>
               </button>
 
               <button
                 onClick={handleFinishSale}
-                className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-sky-500 hover:from-blue-700 hover:to-sky-600 text-white font-bold text-xs rounded-2xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="flex-1 min-w-[110px] py-2.5 bg-gradient-to-r from-blue-600 to-sky-500 hover:from-blue-700 hover:to-sky-600 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
               >
-                <span>Complete & Next Sale</span>
-                <ArrowRight className="w-4 h-4" />
+                <span>Next Sale</span>
+                <ArrowRight className="w-3.5 h-3.5" />
               </button>
             </div>
           </div>

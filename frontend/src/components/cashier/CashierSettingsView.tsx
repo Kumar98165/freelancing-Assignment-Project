@@ -5,8 +5,10 @@ import {
   Sparkles, Loader2, AlertCircle
 } from 'lucide-react';
 import settingsService, { type StoreSettings } from '../../services/settingsService';
+import { useSettings } from '../../context/SettingsContext';
 
 export default function CashierSettingsView() {
+  const { refetch: refetchGlobalSettings } = useSettings();
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isResetting, setIsResetting] = useState(false);
@@ -96,6 +98,7 @@ export default function CashierSettingsView() {
       const updated = await settingsService.updateSettings(payload);
       if (updated) {
         populateFields(updated);
+        await refetchGlobalSettings(); // Propagate to all components
       }
       showToast('Settings Saved Successfully!', 'Store details and TRA parameters updated.');
     } catch (err: any) {
@@ -115,6 +118,7 @@ export default function CashierSettingsView() {
       const res = await settingsService.resetSettings();
       if (res) {
         populateFields(res);
+        await refetchGlobalSettings(); // Propagate to all components
       }
       showToast('Settings Restored', 'Settings restored to defaults.');
     } catch (err: any) {
