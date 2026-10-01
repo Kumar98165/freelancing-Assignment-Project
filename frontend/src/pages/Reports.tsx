@@ -391,7 +391,10 @@ export default function Reports() {
           </div>
         </div>
 
-        {/* REPORT TAB NAVIGATION (SWITCHES REPORT & KPI CARDS) */}
+        {/* 4 DYNAMIC WHITE GLASSMORPHISM KPI CARDS ROW (AUTOMATICALLY UPDATES PER TAB) */}
+        {renderDynamicKPICards()}
+
+        {/* REPORT TAB NAVIGATION (SWITCHES REPORT & KPI CARDS - PLACED BELOW KPIS) */}
         <div className="bg-white rounded-2xl shadow-xs border border-slate-200/80 p-2 sm:p-2.5">
           <div className="flex flex-wrap items-center gap-1.5 sm:gap-2">
             {[
@@ -419,9 +422,6 @@ export default function Reports() {
             })}
           </div>
         </div>
-
-        {/* 4 DYNAMIC WHITE GLASSMORPHISM KPI CARDS ROW (AUTOMATICALLY UPDATES PER TAB) */}
-        {renderDynamicKPICards()}
 
         {/* ===================== TAB 1: SALES REPORT ===================== */}
         {activeTab === 'sales' && (
