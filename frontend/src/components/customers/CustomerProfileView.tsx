@@ -5,7 +5,7 @@ import {
   Table as TableIcon, History as HistoryIcon, CheckCircle2,
   CreditCard, Smartphone, Banknote, ArrowUpRight, Eye, Download, Printer, X
 } from 'lucide-react';
-import type { CustomerRecord } from '../../pages/Customers';
+import type { CustomerRecord, CustomerPurchaseItem, PurchaseItemDetail } from '../../services/customerService';
 
 interface CustomerProfileViewProps {
   customer: CustomerRecord;
@@ -23,10 +23,10 @@ export default function CustomerProfileView({
   formatTZS,
 }: CustomerProfileViewProps) {
   const [activeTab, setActiveTab] = useState<'cards' | 'table' | 'timeline'>('cards');
-  const [selectedReceipt, setSelectedReceipt] = useState<CustomerRecord['purchases'][0] | null>(null);
+  const [selectedReceipt, setSelectedReceipt] = useState<CustomerPurchaseItem | null>(null);
 
   const purchases = customer.purchases || [];
-  const totalSpent = customer.totalPurchases || purchases.reduce((sum, p) => sum + p.total, 0);
+  const totalSpent = customer.totalPurchases || purchases.reduce((sum: number, p: CustomerPurchaseItem) => sum + p.total, 0);
   const purchaseCount = purchases.length;
   const avgOrderValue = purchaseCount > 0 ? Math.round(totalSpent / purchaseCount) : 0;
   const isVIP = totalSpent >= 1000000;
@@ -67,14 +67,14 @@ export default function CustomerProfileView({
     );
   };
 
-  const getItemBreakdown = (receipt: CustomerRecord['purchases'][0]) => {
+  const getItemBreakdown = (receipt: CustomerPurchaseItem): PurchaseItemDetail[] => {
     if (receipt.itemList && receipt.itemList.length > 0) {
       return receipt.itemList;
     }
-    const rawItems = receipt.items.split(',').map(s => s.trim()).filter(Boolean);
+    const rawItems = receipt.items.split(',').map((s: string) => s.trim()).filter(Boolean);
     const count = rawItems.length || 1;
     const splitPrice = Math.round(receipt.total / count);
-    return rawItems.map((name) => {
+    return rawItems.map((name: string) => {
       const matchQty = name.match(/(\d+)\s*x/i);
       const qty = matchQty ? parseInt(matchQty[1], 10) : 1;
       const unitPrice = qty > 1 ? Math.round(splitPrice / qty) : splitPrice;
@@ -87,10 +87,10 @@ export default function CustomerProfileView({
     });
   };
 
-  const handleDownloadReceipt = (receipt: CustomerRecord['purchases'][0]) => {
+  const handleDownloadReceipt = (receipt: CustomerPurchaseItem) => {
     const breakdown = getItemBreakdown(receipt);
     const itemsFormatted = breakdown
-      .map((item, idx) => {
+      .map((item: PurchaseItemDetail, idx: number) => {
         const num = `${idx + 1}.`.padEnd(4, ' ');
         const name = item.name.padEnd(32, ' ').substring(0, 32);
         const qty = `Qty: ${item.qty}`.padEnd(10, ' ');
@@ -329,7 +329,7 @@ TOTAL AMOUNT : ${formatTZS(receipt.total)}
                 No purchase transactions recorded for this customer yet.
               </div>
             ) : (
-              purchases.map((p, idx) => (
+              purchases.map((p: CustomerPurchaseItem, idx: number) => (
                 <div
                   key={idx}
                   onClick={() => setSelectedReceipt(p)}
@@ -416,7 +416,7 @@ TOTAL AMOUNT : ${formatTZS(receipt.total)}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 font-medium text-xs sm:text-sm">
-                    {purchases.map((p, idx) => (
+                    {purchases.map((p: CustomerPurchaseItem, idx: number) => (
                       <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
                         <td className="py-3.5 px-5 font-mono font-bold text-[#4f46e5]">
                           {p.saleNumber}
@@ -463,7 +463,7 @@ TOTAL AMOUNT : ${formatTZS(receipt.total)}
               </div>
             ) : (
               <div className="relative pl-8 space-y-7 before:absolute before:left-3 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-                {purchases.map((p, idx) => (
+                {purchases.map((p: CustomerPurchaseItem, idx: number) => (
                   <div key={idx} className="relative">
                     {/* Glowing point */}
                     <div className="absolute -left-8 top-1.5 w-5 h-5 rounded-full bg-white border-4 border-[#4f46e5] shadow-xs" />
@@ -591,7 +591,7 @@ TOTAL AMOUNT : ${formatTZS(receipt.total)}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-100 font-medium">
-                      {breakdown.map((item, i) => (
+                      {breakdown.map((item: PurchaseItemDetail, i: number) => (
                         <tr key={i} className="hover:bg-slate-50/60 transition-colors">
                           <td className="py-2.5 px-3 text-slate-400 font-bold text-[11px]">{i + 1}</td>
                           <td className="py-2.5 px-3 font-bold text-slate-800">{item.name}</td>

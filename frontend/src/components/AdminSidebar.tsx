@@ -1,5 +1,5 @@
 import { 
-  LayoutDashboard, Package, Warehouse, History, 
+  LayoutDashboard, LayoutGrid, Package, Warehouse, History, 
   Users, Activity, LogOut, ShoppingCart, Menu,
   ChevronRight
 } from 'lucide-react';
@@ -16,6 +16,7 @@ export default function AdminSidebar({ isSidebarOpen, setIsSidebarOpen }: AdminS
 
   const navItems = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+    { name: 'Categories', icon: LayoutGrid, path: '/admin/categories' },
     { name: 'Products', icon: Package, path: '/admin/products' },
     { name: 'Inventory / Stock', icon: Warehouse, path: '/admin/inventory' },
     { name: 'Sales', icon: History, path: '/admin/sales' },
@@ -56,8 +57,9 @@ export default function AdminSidebar({ isSidebarOpen, setIsSidebarOpen }: AdminS
         {/* Navigation Links (Shows labels when expanded, icons-only when collapsed) */}
         <nav className="p-3 space-y-1.5">
           {navItems.map((item) => {
-            const active = location.pathname === item.path || 
-              (item.path === '/admin/products' && location.pathname === '/admin/categories');
+            const active = item.path === '/admin'
+              ? location.pathname === '/admin'
+              : location.pathname.startsWith(item.path);
             return (
               <Link
                 key={item.name}

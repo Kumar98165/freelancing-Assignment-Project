@@ -5,7 +5,7 @@ import {
   Table as TableIcon, History as HistoryIcon, CheckCircle2,
   CreditCard, Smartphone, Banknote, ShieldCheck, ArrowUpRight
 } from 'lucide-react';
-import type { CustomerRecord } from '../../pages/Customers';
+import type { CustomerRecord, CustomerPurchaseItem } from '../../services/customerService';
 
 interface CustomerProfileDrawerProps {
   customer: CustomerRecord | null;
@@ -27,7 +27,7 @@ export default function CustomerProfileDrawer({
   if (!customer) return null;
 
   const purchases = customer.purchases || [];
-  const totalSpent = customer.totalPurchases || purchases.reduce((sum, p) => sum + p.total, 0);
+  const totalSpent = customer.totalPurchases || purchases.reduce((sum: number, p: CustomerPurchaseItem) => sum + p.total, 0);
   const purchaseCount = purchases.length;
   const avgOrderValue = purchaseCount > 0 ? Math.round(totalSpent / purchaseCount) : 0;
   const isVIP = totalSpent >= 1000000;
@@ -254,8 +254,8 @@ export default function CustomerProfileDrawer({
                 type="button"
                 onClick={() => setActiveTab('cards')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${activeTab === 'cards'
-                    ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-200/60'
+                  ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-200/60'
                   }`}
               >
                 <Grid3X3 className="w-3.5 h-3.5" />
@@ -266,8 +266,8 @@ export default function CustomerProfileDrawer({
                 type="button"
                 onClick={() => setActiveTab('table')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${activeTab === 'table'
-                    ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-200/60'
+                  ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-200/60'
                   }`}
               >
                 <TableIcon className="w-3.5 h-3.5" />
@@ -278,8 +278,8 @@ export default function CustomerProfileDrawer({
                 type="button"
                 onClick={() => setActiveTab('timeline')}
                 className={`px-3.5 py-2 rounded-xl text-xs font-bold transition-all flex items-center space-x-1.5 cursor-pointer ${activeTab === 'timeline'
-                    ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-sm'
-                    : 'text-slate-600 hover:bg-slate-200/60'
+                  ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-sm'
+                  : 'text-slate-600 hover:bg-slate-200/60'
                   }`}
               >
                 <HistoryIcon className="w-3.5 h-3.5" />
@@ -295,7 +295,7 @@ export default function CustomerProfileDrawer({
                     No purchase records registered for this customer yet.
                   </div>
                 ) : (
-                  purchases.map((p, idx) => (
+                  purchases.map((p: CustomerPurchaseItem, idx: number) => (
                     <div
                       key={idx}
                       className="relative bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs hover:shadow-md transition-all flex flex-col justify-between overflow-hidden"
@@ -374,7 +374,7 @@ export default function CustomerProfileDrawer({
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100 font-medium">
-                        {purchases.map((p, idx) => (
+                        {purchases.map((p: CustomerPurchaseItem, idx: number) => (
                           <tr key={idx} className="hover:bg-slate-50/70 transition-colors">
                             <td className="p-3 font-mono font-bold text-[#4f46e5]">
                               {p.saleNumber}
@@ -411,7 +411,7 @@ export default function CustomerProfileDrawer({
                   </div>
                 ) : (
                   <div className="relative pl-6 space-y-6 before:absolute before:left-2 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-200">
-                    {purchases.map((p, idx) => (
+                    {purchases.map((p: CustomerPurchaseItem, idx: number) => (
                       <div key={idx} className="relative">
                         {/* Timeline Glowing Dot */}
                         <div className="absolute -left-6 top-1 w-4 h-4 rounded-full bg-white border-3 border-[#4f46e5] shadow-xs" />

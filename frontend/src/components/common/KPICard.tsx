@@ -133,6 +133,7 @@ export default function KPICard({
   icon: Icon,
   color = 'indigo',
   badge,
+  subtitle,
   chartType,
   onClick,
   className = '',
@@ -195,9 +196,17 @@ export default function KPICard({
         <p className="text-slate-400 font-bold text-[10px] sm:text-[11px] tracking-wider uppercase truncate">
           {title}
         </p>
-        <h3 className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-tight mt-0.5 truncate">
+        <h3
+          title={subtitle || (typeof value === 'string' ? value : String(value))}
+          className="text-lg sm:text-xl font-black text-slate-900 tracking-tight leading-tight mt-0.5 truncate"
+        >
           {value}
         </h3>
+        {subtitle && (
+          <p className="text-[10px] text-slate-400 font-medium truncate mt-0.5" title={subtitle}>
+            {subtitle}
+          </p>
+        )}
       </div>
 
       {/* BOTTOM VISUAL: COMPACT SPARKLINE / BARS */}

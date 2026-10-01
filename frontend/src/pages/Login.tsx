@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ShoppingCart, Lock, AtSign, Loader2, ShieldCheck } from 'lucide-react';
+import authService from '../services/authService';
 
 export default function Login() {
   const navigate = useNavigate();
@@ -14,23 +15,32 @@ export default function Login() {
     e.preventDefault();
     setError('');
 
-    if (!username || !password) {
+    if (!username.trim() || !password) {
       setError('Please enter both username and password.');
       return;
     }
 
     setIsLoading(true);
 
-    // Role Routing
-    setTimeout(() => {
+    try {
+      const res = await authService.login(username.trim(), password);
       setIsLoading(false);
-      const lowerUser = username.toLowerCase().trim();
-      if (lowerUser.includes('cashier')) {
-        navigate('/cashier');
+
+      if (res.success && res.data?.user) {
+        const user = res.data.user;
+        if (user.role === 'CASHIER') {
+          navigate('/cashier');
+        } else {
+          navigate('/admin');
+        }
       } else {
-        navigate('/admin');
+        setError(res.message || 'Login failed. Please check your credentials.');
       }
-    }, 500);
+    } catch (err: any) {
+      setIsLoading(false);
+      const serverMsg = err.response?.data?.message || 'Unable to connect to server. Please ensure backend is running.';
+      setError(serverMsg);
+    }
   };
 
   const setDemo = (user: string, pass: string) => {

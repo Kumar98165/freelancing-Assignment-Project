@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import {
-  LayoutDashboard, Package, Grid, Warehouse, Users,
+  LayoutDashboard, LayoutGrid, Package, Warehouse, Users,
   ShoppingCart, BarChart3, Settings, LogOut, Bell, Menu, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
@@ -17,8 +17,8 @@ export default function AdminLayout({ title, children }: AdminLayoutProps) {
 
   const navItems = [
     { name: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+    { name: 'Categories', icon: LayoutGrid, path: '/admin/categories' },
     { name: 'Products', icon: Package, path: '/admin/products' },
-    { name: 'Categories', icon: Grid, path: '/admin/categories' },
     { name: 'Inventory', icon: Warehouse, path: '/admin/inventory' },
     { name: 'Customers', icon: Users, path: '/admin/customers' },
     { name: 'Sales', icon: ShoppingCart, path: '/admin/sales' },
@@ -54,9 +54,9 @@ export default function AdminLayout({ title, children }: AdminLayoutProps) {
           {/* Nav Links */}
           <nav className="px-3 py-2 space-y-1.5">
             {navItems.map((item) => {
-              const active = location.pathname === item.path ||
-                (item.path === '/admin/products' && location.pathname.startsWith('/admin/products')) ||
-                (item.path === '/admin/categories' && location.pathname === '/admin/categories');
+              const active = item.path === '/admin'
+                ? location.pathname === '/admin'
+                : location.pathname.startsWith(item.path);
 
               return (
                 <Link
@@ -64,8 +64,8 @@ export default function AdminLayout({ title, children }: AdminLayoutProps) {
                   to={item.path}
                   title={isCollapsed ? item.name : undefined}
                   className={`w-full flex items-center ${isCollapsed ? 'justify-center px-0 py-3.5' : 'px-4 py-3'} rounded-2xl font-bold text-sm transition-all ${active
-                      ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-md shadow-indigo-500/25 font-extrabold'
-                      : 'text-slate-600 hover:bg-slate-50 hover:text-[#4f46e5]'
+                    ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-md shadow-indigo-500/25 font-extrabold'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-[#4f46e5]'
                     }`}
                 >
                   <item.icon className={`w-5 h-5 flex-shrink-0 ${!isCollapsed ? 'mr-3' : ''} ${active ? 'text-white' : 'text-slate-500'}`} />

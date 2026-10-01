@@ -79,11 +79,10 @@ export default function Pagination({
                 key={`page-${page}`}
                 type="button"
                 onClick={() => onPageChange(page)}
-                className={`w-8 h-8 rounded-xl font-bold text-xs transition-all flex items-center justify-center cursor-pointer ${
-                  currentPage === page
+                className={`w-8 h-8 rounded-xl font-bold text-xs transition-all flex items-center justify-center cursor-pointer ${currentPage === page
                     ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-md shadow-indigo-500/20'
                     : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                }`}
+                  }`}
               >
                 {page}
               </button>

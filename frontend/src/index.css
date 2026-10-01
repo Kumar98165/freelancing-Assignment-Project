@@ -12,7 +12,7 @@
   --color-water-700: #0369a1;
   --color-water-800: #075985;
   --color-water-900: #0c4a6e;
-  
+
   --font-sans: "Outfit", "Inter", system-ui, sans-serif;
   --font-outfit: "Outfit", system-ui, sans-serif;
 }
@@ -24,4 +24,30 @@ body {
 
 .glass-panel {
   @apply bg-white/70 backdrop-blur-md border border-white/40 shadow-xl;
+}
+
+/* Custom sleek scrollbar */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #94a3b8 #f1f5f9;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 8px;
+  border: 1.5px solid #f1f5f9;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
 }
