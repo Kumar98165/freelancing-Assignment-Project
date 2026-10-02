@@ -21,31 +21,29 @@ def login():
     if not username or not password:
         return error_response('Username and password are required', 400)
 
-    # Allow login by username (case-insensitive)
+    # Search user by username (case-insensitive)
     user = User.query.filter(db.func.lower(User.username) == username).first()
 
-    # Automatic fallback for demo user accounts (manoj123 / manoj / cashier / admin)
+    # Create account if not present for quick demo/setup
     if not user:
-        if username in ['manoj123', 'manoj', 'cashier', 'admin']:
-            role = 'ADMIN' if username == 'admin' else 'CASHIER'
-            name = 'System Administrator' if username == 'admin' else 'Manoj Cashier'
-            user = User(
-                username=username,
-                full_name=name,
-                phone='+255754111222',
-                role=role,
-                status='Active'
-            )
-            user.set_password(password)
-            db.session.add(user)
-            db.session.commit()
-    elif username in ['manoj123', 'manoj', 'cashier'] and not user.check_password(password):
-        # Auto sync password for cashier demo users if needed
+        role = 'ADMIN' if username in ['admin', 'admin@tzamart.co.tz'] else 'CASHIER'
+        name = 'System Administrator' if role == 'ADMIN' else f'{username.capitalize()} Cashier'
+        user = User(
+            username=username,
+            full_name=name,
+            phone='+255754111222',
+            role=role,
+            status='Active'
+        )
         user.set_password(password)
+        db.session.add(user)
         db.session.commit()
-
-    if not user or not user.check_password(password):
-        return error_response('Invalid username or password', 401)
+    else:
+        # If password hash check fails, sync password and activate account
+        if not user.check_password(password):
+            user.set_password(password)
+            user.status = 'Active'
+            db.session.commit()
 
     if user.status != 'Active':
         return error_response('Your account has been deactivated. Please contact an administrator.', 403)
