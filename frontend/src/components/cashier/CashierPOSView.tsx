@@ -1,15 +1,16 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, useMemo } from 'react';
 import {
-  ShoppingCart, Plus, Trash2, Printer, Download, FileText,
+  ShoppingCart, Plus, Trash2, Printer, Download,
   DollarSign, CreditCard, Smartphone,
   AlertCircle, ScanBarcode, X, Calendar, Clock,
   HelpCircle, ArrowRight, User, CheckCircle2, ShieldCheck, Loader2, RefreshCw,
-  RotateCcw
+  RotateCcw, UserPlus, Search, Phone, Mail, BadgeCheck, UserX
 } from 'lucide-react';
 import { type PaymentState, type MobileMoneyProvider } from '../../services/mockPaymentService';
 import posService, { type POSProductItem } from '../../services/posService';
 import { inventoryService, type InventoryItem } from '../../services/inventoryService';
 import { useSettings } from '../../context/SettingsContext';
+import customerService, { type CustomerRecord } from '../../services/customerService';
 
 export type POSProduct = POSProductItem;
 
@@ -46,6 +47,7 @@ interface CashierPOSViewProps {
 
 export default function CashierPOSView({ onSaleComplete, externalCartItem }: CashierPOSViewProps) {
   const { settings } = useSettings();
+
   // Live Products & Categories from Backend Inventory
   const [productsList, setProductsList] = useState<POSProduct[]>([]);
   const [isLoadingProducts, setIsLoadingProducts] = useState<boolean>(false);
@@ -57,6 +59,21 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
   const [selectedCategory, setSelectedCategory] = useState('All');
   const [cart, setCart] = useState<CartItem[]>([]);
   const [recentScans, setRecentScans] = useState<RecentScan[]>([]);
+
+  // ── Customer State ──────────────────────────────────────────────────────────
+  const [selectedCustomer, setSelectedCustomer] = useState<CustomerRecord | null>(null);
+  const [customerQuery, setCustomerQuery] = useState('');
+  const [customerResults, setCustomerResults] = useState<CustomerRecord[]>([]);
+  const [isSearchingCustomers, setIsSearchingCustomers] = useState(false);
+  const [showCustomerPanel, setShowCustomerPanel] = useState(false);
+  // New customer inline creation
+  const [showNewCustomerForm, setShowNewCustomerForm] = useState(false);
+  const [newCustName, setNewCustName] = useState('');
+  const [newCustPhone, setNewCustPhone] = useState('');
+  const [newCustEmail, setNewCustEmail] = useState('');
+  const [isCreatingCustomer, setIsCreatingCustomer] = useState(false);
+  const [customerError, setCustomerError] = useState<string | null>(null);
+  // ────────────────────────────────────────────────────────────────────────────
 
   // Payment Form & Workflow State
   const [paymentMethod, setPaymentMethod] = useState<'Cash' | 'Mobile Money' | 'Card'>('Cash');
@@ -161,6 +178,46 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
     fetchProductsAndCategories();
   }, [fetchProductsAndCategories]);
 
+  // ── Customer panel: load all on open, filter by query ──────────────────────
+  const [allCustomers, setAllCustomers] = useState<CustomerRecord[]>([]);
+  const [isLoadingAllCustomers, setIsLoadingAllCustomers] = useState(false);
+
+  // Load all customers when panel opens
+  useEffect(() => {
+    if (!showCustomerPanel) return;
+    setIsLoadingAllCustomers(true);
+    customerService.getCustomers({ limit: 200 })
+      .then(res => setAllCustomers(res.customers || []))
+      .catch(() => setAllCustomers([]))
+      .finally(() => setIsLoadingAllCustomers(false));
+  }, [showCustomerPanel]);
+
+  // Debounced server-side search when query typed (supplements local filter)
+  useEffect(() => {
+    const q = customerQuery.trim();
+    if (!q) {
+      setCustomerResults([]);
+      return;
+    }
+    const timer = setTimeout(async () => {
+      try {
+        setIsSearchingCustomers(true);
+        const res = await customerService.getCustomers({ search: q, limit: 50 });
+        setCustomerResults(res.customers || []);
+      } catch {
+        setCustomerResults([]);
+      } finally {
+        setIsSearchingCustomers(false);
+      }
+    }, 300);
+    return () => clearTimeout(timer);
+  }, [customerQuery]);
+
+  // Displayed list: if user typed → server results; else → all customers
+  const displayedCustomers = customerQuery.trim()
+    ? customerResults
+    : allCustomers;
+
   useEffect(() => {
     const timer = setInterval(() => {
       const now = new Date();
@@ -174,13 +231,49 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
     return `TZS ${new Intl.NumberFormat('en-TZ', { maximumFractionDigits: 0 }).format(amount)}`;
   };
 
-  const filteredProducts = productsList.filter(p => {
-    const matchesSearch = p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+  // Customer helpers
+  const handleSelectCustomer = (c: CustomerRecord) => {
+    setSelectedCustomer(c);
+    setCustomerQuery('');
+    setCustomerResults([]);
+    setShowCustomerPanel(false);
+    setShowNewCustomerForm(false);
+    setCustomerError(null);
+    // If Mobile Money, pre-fill phone from customer
+    if (c.phone) setMobilePhone(c.phone.replace(/^\+255/, '0').replace(/\s/g, ''));
+  };
+
+  const handleCreateCustomer = async () => {
+    if (!newCustName.trim() || !newCustPhone.trim()) {
+      setCustomerError('Name and phone are required.');
+      return;
+    }
+    try {
+      setIsCreatingCustomer(true);
+      setCustomerError(null);
+      const created = await customerService.createCustomer({
+        name: newCustName.trim(),
+        phone: newCustPhone.trim(),
+        email: newCustEmail.trim() || undefined,
+      });
+      handleSelectCustomer(created);
+      setNewCustName(''); setNewCustPhone(''); setNewCustEmail('');
+      setShowNewCustomerForm(false);
+    } catch (err: any) {
+      setCustomerError(err.response?.data?.message || 'Failed to create customer.');
+    } finally {
+      setIsCreatingCustomer(false);
+    }
+  };
+
+  const filteredProducts = useMemo(() => productsList.filter(p => {
+    const matchesSearch = !searchTerm ||
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.sku.toLowerCase().includes(searchTerm.toLowerCase()) ||
       p.barcode.includes(searchTerm);
     const matchesCat = selectedCategory === 'All' || p.category === selectedCategory;
     return matchesSearch && matchesCat;
-  });
+  }), [productsList, searchTerm, selectedCategory]);
 
   const handleAddProductToCart = useCallback((product: POSProduct) => {
     setBarcodeError(null);
@@ -258,8 +351,9 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
   };
 
   // Financial Calculations
+  const currentVatRate = Number(settings.vatRate) || 18;
   const rawSubtotal = cart.reduce((sum, item) => sum + (item.product.price * (Number(item.quantity) || 0)), 0);
-  const vatTax = Math.round(rawSubtotal * 0.18);
+  const vatTax = Math.round(rawSubtotal * (currentVatRate / 100));
   const grandTotal = rawSubtotal + vatTax;
 
   const numericPaid = Number(amountPaid) || grandTotal;
@@ -283,33 +377,23 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
       items: checkoutItems,
       paymentMethod: stdPayMethod,
       provider: paymentMethod === 'Mobile Money' ? mobileProvider : undefined,
-      customerPhone: paymentMethod === 'Mobile Money' ? mobilePhone : undefined,
+      customerPhone: selectedCustomer?.phone ||
+        (paymentMethod === 'Mobile Money' ? mobilePhone : undefined),
       paymentRef: paymentMethod === 'Card' ? cardReference : undefined,
       amountPaid: paymentMethod === 'Cash' ? numericPaid : grandTotal,
       cashierName: 'John Cashier',
-      customerName: 'Walk-in Customer'
+      customerName: selectedCustomer?.name || 'Walk-in Customer',
+      customerId: selectedCustomer?.id || undefined,
     };
 
     try {
       if (paymentMethod === 'Cash') {
         setPaymentState('Pending');
         let saleData: any = null;
-        try {
-          const res = await posService.processCheckout(payload);
-          saleData = res.sale || res.receipt;
-        } catch {
-          // Adjust stock directly
-          await Promise.all(
-            cart.map(item =>
-              inventoryService.adjustStock({
-                productId: item.product.id,
-                newStock: Math.max(0, item.product.stock - Number(item.quantity)),
-                reason: 'PHYSICAL_COUNT',
-                notes: `POS Sale Checkout`
-              }).catch(() => null)
-            )
-          );
-        }
+        // IMPORTANT: Stock is ONLY reduced by the backend on successful checkout.
+        // No client-side stock fallback — if API fails we show an error.
+        const res = await posService.processCheckout(payload);
+        saleData = res.sale || res.receipt;
         setPaymentState('Success');
 
         const now = new Date();
@@ -329,7 +413,9 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
           date: saleData?.date || now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
           time: saleData?.time || currentTime,
           cashier: saleData?.cashier_name || saleData?.cashier || 'John Cashier (ID: C-104)',
-          customer: saleData?.customer_name || saleData?.customer || 'Walk-in Customer',
+          customer: selectedCustomer?.name || saleData?.customer_name || saleData?.customer || 'Walk-in Customer',
+          customerPhone: selectedCustomer?.phone || saleData?.customer_phone || undefined,
+          customerEmail: selectedCustomer?.email || undefined,
           items: [...cart],
           rawSubtotal,
           vatTax,
@@ -359,21 +445,9 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
         setTimeout(() => setPaymentState('Processing'), 600);
 
         let saleData: any = null;
-        try {
-          const res = await posService.processCheckout(payload);
-          saleData = res.sale || res.receipt;
-        } catch {
-          await Promise.all(
-            cart.map(item =>
-              inventoryService.adjustStock({
-                productId: item.product.id,
-                newStock: Math.max(0, item.product.stock - Number(item.quantity)),
-                reason: 'PHYSICAL_COUNT',
-                notes: `POS Sale - Mobile Money (${mobileProvider})`
-              }).catch(() => null)
-            )
-          );
-        }
+        // IMPORTANT: Stock is ONLY reduced by the backend on successful checkout.
+        const res = await posService.processCheckout(payload);
+        saleData = res.sale || res.receipt;
         setPaymentState('Success');
 
         const now = new Date();
@@ -393,14 +467,16 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
           date: saleData?.date || now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
           time: saleData?.time || currentTime,
           cashier: saleData?.cashier_name || saleData?.cashier || 'John Cashier (ID: C-104)',
-          customer: saleData?.customer_name || saleData?.customer || 'Walk-in Customer',
+          customer: selectedCustomer?.name || saleData?.customer_name || saleData?.customer || 'Walk-in Customer',
+          customerPhone: selectedCustomer?.phone || mobilePhone || undefined,
+          customerEmail: selectedCustomer?.email || undefined,
           items: [...cart],
           rawSubtotal,
           vatTax,
           grandTotal,
           paymentMethod: `Mobile Money (${mobileProvider})`,
           mobileProvider,
-          customerPhone: mobilePhone,
+          customerPhone: selectedCustomer?.phone || mobilePhone || undefined,
           numericPaid: grandTotal,
           cashChange: 0,
           fiscalInformation: {
@@ -425,21 +501,9 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
         setTimeout(() => setPaymentState('Processing'), 600);
 
         let saleData: any = null;
-        try {
-          const res = await posService.processCheckout(payload);
-          saleData = res.sale || res.receipt;
-        } catch {
-          await Promise.all(
-            cart.map(item =>
-              inventoryService.adjustStock({
-                productId: item.product.id,
-                newStock: Math.max(0, item.product.stock - Number(item.quantity)),
-                reason: 'PHYSICAL_COUNT',
-                notes: `POS Sale - Card/Bank`
-              }).catch(() => null)
-            )
-          );
-        }
+        // IMPORTANT: Stock is ONLY reduced by the backend on successful checkout.
+        const res = await posService.processCheckout(payload);
+        saleData = res.sale || res.receipt;
         setPaymentState('Success');
 
         const now = new Date();
@@ -459,7 +523,9 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
           date: saleData?.date || now.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }),
           time: saleData?.time || currentTime,
           cashier: saleData?.cashier_name || saleData?.cashier || 'John Cashier (ID: C-104)',
-          customer: saleData?.customer_name || saleData?.customer || 'Walk-in Customer',
+          customer: selectedCustomer?.name || saleData?.customer_name || saleData?.customer || 'Walk-in Customer',
+          customerPhone: selectedCustomer?.phone || undefined,
+          customerEmail: selectedCustomer?.email || undefined,
           items: [...cart],
           rawSubtotal,
           vatTax,
@@ -509,6 +575,11 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
     setPaymentErrorMessage(null);
     setBarcodeError(null);
     setStockError(null);
+    setSelectedCustomer(null);
+    setCustomerQuery('');
+    setCustomerResults([]);
+    setShowCustomerPanel(false);
+    setShowNewCustomerForm(false);
   };
 
   return (
@@ -653,6 +724,16 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
                 <span className="px-2 py-0.5 bg-red-500 text-white rounded-full text-[10px] font-black">
                   {cart.reduce((sum, i) => sum + (Number(i.quantity) || 0), 0)}
                 </span>
+                {/* Customer badge on cart */}
+                {selectedCustomer && (
+                  <span className="ml-1 flex items-center space-x-1 px-2 py-0.5 bg-indigo-50 border border-indigo-200 text-indigo-700 rounded-full text-[10px] font-bold">
+                    <BadgeCheck className="w-3 h-3 text-indigo-500" />
+                    <span className="max-w-[80px] truncate">{selectedCustomer.name}</span>
+                    <button onClick={() => setSelectedCustomer(null)} className="hover:text-red-500 cursor-pointer">
+                      <X className="w-2.5 h-2.5" />
+                    </button>
+                  </span>
+                )}
               </div>
 
               {cart.length > 0 && (
@@ -831,10 +912,196 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
         {/* COLUMN 3: PAYMENT METHODS & CHECKOUT COMPLETION */}
         <div className="lg:col-span-4 bg-white/80 backdrop-blur-2xl rounded-3xl border border-white p-5 shadow-sm flex flex-col justify-between">
           <div>
-            <h3 className="font-extrabold text-sm text-slate-900 mb-4 flex items-center">
+            <h3 className="font-extrabold text-sm text-slate-900 mb-3 flex items-center">
               <CreditCard className="w-4 h-4 mr-2 text-blue-600" /> Payment
             </h3>
 
+            {/* ── CUSTOMER PANEL ─────────────────────────────────────────── */}
+            <div className="mb-3">
+              {selectedCustomer ? (
+                /* Selected Customer Card */
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-2xl flex items-start justify-between">
+                  <div className="flex items-start space-x-2">
+                    <div className="w-8 h-8 bg-indigo-600 text-white rounded-xl flex items-center justify-center font-black text-xs flex-shrink-0">
+                      {selectedCustomer.name.charAt(0).toUpperCase()}
+                    </div>
+                    <div>
+                      <p className="font-black text-xs text-indigo-900">{selectedCustomer.name}</p>
+                      <p className="text-[10px] font-mono text-indigo-700 flex items-center space-x-1">
+                        <Phone className="w-2.5 h-2.5" /><span>{selectedCustomer.phone}</span>
+                      </p>
+                      {selectedCustomer.email && (
+                        <p className="text-[10px] font-mono text-indigo-600 flex items-center space-x-1">
+                          <Mail className="w-2.5 h-2.5" /><span>{selectedCustomer.email}</span>
+                        </p>
+                      )}
+                      <span className={`inline-flex text-[9px] font-bold px-1.5 py-0.5 rounded-full mt-0.5 ${selectedCustomer.tier === 'VIP' ? 'bg-amber-100 text-amber-700' :
+                        selectedCustomer.tier === 'REGULAR' ? 'bg-emerald-100 text-emerald-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>{selectedCustomer.tier}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => { setSelectedCustomer(null); setShowCustomerPanel(false); }}
+                    className="text-indigo-400 hover:text-red-500 cursor-pointer"
+                    title="Remove customer"
+                  >
+                    <UserX className="w-4 h-4" />
+                  </button>
+                </div>
+              ) : (
+                /* Customer search trigger */
+                <button
+                  type="button"
+                  onClick={() => { setShowCustomerPanel(v => !v); setShowNewCustomerForm(false); }}
+                  className="w-full py-2.5 px-3 border border-dashed border-slate-300 hover:border-indigo-400 rounded-2xl text-xs font-bold text-slate-500 hover:text-indigo-600 flex items-center space-x-2 transition-all cursor-pointer"
+                >
+                  <User className="w-3.5 h-3.5" />
+                  <span>Add Customer (Optional)</span>
+                  <span className="ml-auto text-[10px] text-slate-400">Walk-in</span>
+                </button>
+              )}
+
+              {/* Expandable customer dropdown */}
+              {showCustomerPanel && !selectedCustomer && (
+                <div className="mt-2 bg-white border border-indigo-200 rounded-2xl shadow-xl overflow-hidden z-20">
+
+                  {/* Search bar */}
+                  <div className="p-2.5 border-b border-slate-100">
+                    <div className="relative">
+                      <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                      <input
+                        type="text"
+                        value={customerQuery}
+                        onChange={e => { setCustomerQuery(e.target.value); setShowNewCustomerForm(false); }}
+                        placeholder="Search name, phone, or email..."
+                        className="w-full pl-9 pr-8 py-2 text-xs font-medium bg-slate-50 border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 focus:outline-none"
+                        autoFocus
+                      />
+                      {(isSearchingCustomers || isLoadingAllCustomers) && (
+                        <Loader2 className="w-3.5 h-3.5 text-indigo-400 animate-spin absolute right-3 top-1/2 -translate-y-1/2" />
+                      )}
+                      {customerQuery && (
+                        <button
+                          onClick={() => setCustomerQuery('')}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 cursor-pointer"
+                        >
+                          <X className="w-3 h-3" />
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Customer list */}
+                  <div className="max-h-[200px] overflow-y-auto">
+                    {isLoadingAllCustomers && !customerQuery ? (
+                      <div className="py-6 text-center">
+                        <Loader2 className="w-5 h-5 animate-spin text-indigo-400 mx-auto mb-1" />
+                        <p className="text-[11px] text-slate-400">Loading customers...</p>
+                      </div>
+                    ) : displayedCustomers.length > 0 ? (
+                      <>
+                        <p className="px-3 pt-2 text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                          {customerQuery ? `${displayedCustomers.length} results` : `All Customers (${allCustomers.length})`}
+                        </p>
+                        {displayedCustomers.map((c, idx) => (
+                          <button
+                            key={c.id}
+                            type="button"
+                            onClick={() => handleSelectCustomer(c)}
+                            className={`w-full text-left px-3 py-2.5 hover:bg-indigo-50 flex items-center space-x-2.5 transition-colors cursor-pointer border-b last:border-0 border-slate-50`}
+                          >
+                            {/* Avatar */}
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center font-black text-xs flex-shrink-0 ${
+                              c.tier === 'VIP' ? 'bg-amber-100 text-amber-700' :
+                              c.tier === 'REGULAR' ? 'bg-emerald-100 text-emerald-700' :
+                              'bg-indigo-100 text-indigo-700'
+                            }`}>
+                              {c.name.charAt(0).toUpperCase()}
+                            </div>
+                            {/* Info */}
+                            <div className="flex-1 min-w-0">
+                              <p className="font-bold text-xs text-slate-900 truncate">{c.name}</p>
+                              <p className="text-[10px] text-slate-500 font-mono truncate">
+                                {c.phone}
+                                {c.email ? ` · ${c.email}` : ''}
+                              </p>
+                            </div>
+                            {/* Tier */}
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full flex-shrink-0 ${
+                              c.tier === 'VIP' ? 'bg-amber-100 text-amber-700' :
+                              c.tier === 'REGULAR' ? 'bg-emerald-100 text-emerald-700' :
+                              'bg-slate-100 text-slate-500'
+                            }`}>{c.tier}</span>
+                          </button>
+                        ))}
+                      </>
+                    ) : (
+                      <div className="py-5 text-center">
+                        <User className="w-6 h-6 text-slate-300 mx-auto mb-1" />
+                        <p className="text-[11px] text-slate-400">
+                          {customerQuery ? 'No customers found.' : 'No customers yet.'}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Add new customer */}
+                  <div className="border-t border-slate-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowNewCustomerForm(v => !v)}
+                      className="w-full px-3 py-2.5 text-[11px] font-bold text-indigo-600 hover:bg-indigo-50 flex items-center space-x-2 transition-colors cursor-pointer"
+                    >
+                      <UserPlus className="w-3.5 h-3.5" />
+                      <span>{showNewCustomerForm ? 'Hide form' : '+ Add New Customer'}</span>
+                    </button>
+
+                    {showNewCustomerForm && (
+                      <div className="px-3 pb-3 space-y-2 border-t border-slate-100 pt-2">
+                        {customerError && (
+                          <div className="p-2 bg-red-50 border border-red-200 rounded-xl">
+                            <p className="text-[11px] text-red-600 font-bold">{customerError}</p>
+                          </div>
+                        )}
+                        <input
+                          type="text"
+                          value={newCustName}
+                          onChange={e => setNewCustName(e.target.value)}
+                          placeholder="Full Name *"
+                          className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 focus:outline-none bg-slate-50"
+                        />
+                        <input
+                          type="text"
+                          value={newCustPhone}
+                          onChange={e => setNewCustPhone(e.target.value)}
+                          placeholder="Phone *  e.g. +255712345678"
+                          className="w-full px-3 py-2 text-xs font-mono border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 focus:outline-none bg-slate-50"
+                        />
+                        <input
+                          type="email"
+                          value={newCustEmail}
+                          onChange={e => setNewCustEmail(e.target.value)}
+                          placeholder="Email (Optional)"
+                          className="w-full px-3 py-2 text-xs font-medium border border-slate-200 rounded-xl focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-400 focus:outline-none bg-slate-50"
+                        />
+                        <button
+                          type="button"
+                          onClick={handleCreateCustomer}
+                          disabled={isCreatingCustomer}
+                          className="w-full py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl flex items-center justify-center space-x-1.5 cursor-pointer disabled:opacity-60 transition-colors shadow-sm shadow-indigo-500/30"
+                        >
+                          {isCreatingCustomer
+                            ? <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                            : <UserPlus className="w-3.5 h-3.5" />}
+                          <span>{isCreatingCustomer ? 'Creating...' : 'Create & Select'}</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
             {/* ORDER FINANCIAL SUMMARY */}
             <div className="p-4 bg-slate-50/80 rounded-2xl border border-slate-100 space-y-2 mb-4">
               <div className="flex justify-between text-xs text-slate-600">
@@ -842,7 +1109,7 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
                 <span className="font-bold text-slate-800">{formatCurrency(rawSubtotal)}</span>
               </div>
               <div className="flex justify-between text-xs text-slate-600">
-                <span>Tax (18%)</span>
+                <span>Tax ({settings.vatRate || 18}%)</span>
                 <span className="font-bold text-slate-800">{formatCurrency(vatTax)}</span>
               </div>
               <div className="pt-2 border-t border-slate-200 flex justify-between items-baseline">
@@ -1094,32 +1361,38 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
 
       {/* COMPLETED SALE & TRA FISCAL RECEIPT MODAL */}
       {receiptModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-3 sm:p-4">
-          <div className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-100 flex flex-col max-h-[92vh] overflow-hidden">
-            {/* 1. STICKY TOP HEADER */}
-            <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 border-b border-slate-100 flex-shrink-0 bg-white print:hidden">
-              <div className="flex items-center space-x-2">
-                <div className="w-8 h-8 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
-                  <CheckCircle2 className="w-4 h-4" />
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
+          onClick={handleFinishSale}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200/90 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-150 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-slate-50/60">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#4f46e5] text-white flex items-center justify-center font-black text-sm shadow-xs">
+                  TZ
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm text-slate-900 leading-tight">Sale Transaction Receipt</h3>
-                  <p className="text-[10.5px] font-medium text-emerald-600 leading-tight">Official Supermarket & TRA Fiscal Record</p>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight leading-none">{receiptModal.supermarketName || 'TZA MART TANZANIA'}</h3>
+                  <p className="text-[10px] text-slate-500 font-medium mt-0.5">{receiptModal.storeBranch || 'Mlimani City Mall, Dar es Salaam'}</p>
                 </div>
               </div>
-
               <button
+                type="button"
                 onClick={handleFinishSale}
-                className="p-1.5 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-all cursor-pointer"
-                title="Close Receipt"
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 transition-colors cursor-pointer"
+                title="Close"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4.5 h-4.5" />
               </button>
             </div>
 
             {/* DOWNLOAD NOTICE TOAST */}
             {downloadNotice && (
-              <div className="mx-4 mt-3 p-2.5 bg-blue-600 text-white rounded-xl text-xs font-bold flex items-center justify-between shadow-sm flex-shrink-0 print:hidden">
+              <div className="mx-4 mt-2 p-2 bg-indigo-600 text-white rounded-xl text-xs font-bold flex items-center justify-between shadow-xs flex-shrink-0">
                 <div className="flex items-center space-x-2">
                   <Download className="w-3.5 h-3.5 animate-bounce" />
                   <span>{downloadNotice}</span>
@@ -1128,142 +1401,131 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
               </div>
             )}
 
-            {/* 2. SCROLLABLE CLEAN PRINTABLE RECEIPT CONTENT */}
-            <div className="p-4 sm:p-5 overflow-y-auto flex-1 custom-scrollbar">
-              <div id="printable-receipt" className="space-y-3.5 font-sans bg-white p-3.5 sm:p-4 rounded-2xl border border-slate-200/80">
-                {/* STORE HEADER */}
-                <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-300">
-                  <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-sky-400 rounded-xl mx-auto flex items-center justify-center text-white shadow-sm mb-1.5">
-                    <ShoppingCart className="w-5 h-5" />
-                  </div>
-                  <h2 className="font-black text-lg text-slate-900 tracking-tight">{receiptModal.supermarketName}</h2>
-                  <p className="text-xs text-slate-600 font-medium">{receiptModal.storeBranch}</p>
-                  <div className="text-[11px] text-slate-500 font-mono flex items-center justify-center space-x-2 pt-0.5">
-                    <span>TIN: <strong className="text-slate-700">{receiptModal.tin}</strong></span>
-                    <span>•</span>
-                    <span>VRN: <strong className="text-slate-700">{receiptModal.vrn}</strong></span>
-                  </div>
-                </div>
+            {/* Scrollable Printable Receipt Body */}
+            <div id="printable-receipt" className="flex-1 overflow-y-auto px-5 py-3.5 space-y-3 text-slate-800 text-xs bg-white">
+              {/* TIN & VRN */}
+              <div className="text-[10px] text-slate-500 font-mono text-center pb-1">
+                TIN: <strong className="text-slate-700 font-bold">{receiptModal.tin || '102-394-857'}</strong> | VRN: <strong className="text-slate-700 font-bold">{receiptModal.vrn || '40012983-Z'}</strong>
+              </div>
 
-                {/* TRANSACTION METADATA */}
-                <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs">
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div>
-                      <span className="text-slate-400 font-medium">Receipt No:</span>
-                      <p className="font-bold text-slate-900 font-mono">{receiptModal.receiptNo}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-slate-400 font-medium">Date & Time:</span>
-                      <p className="font-bold text-slate-900">{receiptModal.date} {receiptModal.time}</p>
-                    </div>
-                    <div>
-                      <span className="text-slate-400 font-medium">Cashier:</span>
-                      <p className="font-bold text-slate-900 truncate">{receiptModal.cashier}</p>
-                    </div>
-                    <div className="text-right">
-                      <span className="text-slate-400 font-medium">Payment Mode:</span>
-                      <p className="font-bold text-slate-900">{receiptModal.paymentMethod}</p>
-                    </div>
-                  </div>
-                </div>
+              <div className="border-t border-dashed border-slate-200" />
 
-                {/* ITEM TABLE */}
-                <div className="pt-1">
-                  <table className="w-full text-left text-xs">
-                    <thead>
-                      <tr className="text-slate-400 font-bold border-b border-slate-200 pb-1.5 text-[10px] uppercase">
-                        <th className="pb-1.5">Item</th>
-                        <th className="pb-1.5 text-center">Qty</th>
-                        <th className="pb-1.5 text-right">Price</th>
-                        <th className="pb-1.5 text-right">Total</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-slate-100 font-medium text-slate-800 text-[11px]">
-                      {receiptModal.items.map((item: CartItem) => (
-                        <tr key={item.product.id}>
-                          <td className="py-2 pr-2">
-                            <p className="font-bold text-slate-900">{item.product.name}</p>
-                            {item.product.sku && <span className="text-[10px] text-slate-400 font-mono">{item.product.sku}</span>}
-                          </td>
-                          <td className="py-2 text-center font-bold text-slate-900">{item.quantity}</td>
-                          <td className="py-2 text-right font-mono text-slate-600">{formatCurrency(item.product.price)}</td>
-                          <td className="py-2 text-right font-bold text-slate-900 font-mono">{formatCurrency(item.product.price * Number(item.quantity))}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              {/* Transaction Meta */}
+              <div className="grid grid-cols-2 gap-y-1.5 text-[11px] font-medium text-slate-600">
+                <div>Receipt #: <span className="font-mono font-bold text-slate-900">{receiptModal.receiptNo}</span></div>
+                <div>Date: <span className="font-mono text-slate-900">{receiptModal.date} {receiptModal.time}</span></div>
+                <div>Customer: <span className="font-bold text-slate-900">{receiptModal.customer || 'Walk-in Customer'}</span></div>
+                <div>Cashier: <span className="font-bold text-slate-900">{receiptModal.cashier}</span></div>
+              </div>
 
-                {/* FINANCIAL TOTALS */}
-                <div className="border-t border-slate-200 pt-2.5 space-y-1 text-xs">
-                  <div className="flex justify-between text-slate-600 text-[11px]">
-                    <span>Subtotal (Excl. VAT):</span>
-                    <span className="font-mono font-bold text-slate-900">{formatCurrency(receiptModal.rawSubtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-500 text-[11px]">
-                    <span>{receiptModal.vatRate || '18'}% TRA VAT (Included):</span>
-                    <span className="font-mono text-slate-700">{formatCurrency(receiptModal.vatTax)}</span>
-                  </div>
-                  <div className="flex justify-between font-black text-sm py-1.5 border-t border-b border-slate-200 text-slate-900 bg-slate-50 px-2 rounded-lg my-1">
-                    <span>TOTAL PAID:</span>
-                    <span className="font-mono text-blue-600 text-base">{formatCurrency(receiptModal.grandTotal)}</span>
-                  </div>
-                  {receiptModal.paymentMethod === 'Cash' && (
-                    <div className="flex justify-between text-[11px] text-slate-600 pt-0.5 px-1">
-                      <span>Received: <strong className="font-mono text-slate-900">{formatCurrency(receiptModal.numericPaid)}</strong></span>
-                      <span>Change: <strong className="font-mono text-emerald-600">{formatCurrency(receiptModal.cashChange)}</strong></span>
-                    </div>
-                  )}
-                </div>
+              <div className="border-t border-dashed border-slate-200" />
 
-                {/* COMPACT TRA FISCAL VERIFICATION */}
-                <div className="bg-emerald-50 rounded-xl p-2.5 border border-emerald-200 text-[11px] space-y-1">
-                  <div className="flex items-center justify-between text-emerald-800 font-bold text-[10px]">
-                    <span className="flex items-center">
-                      <ShieldCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                      TRA ELECTRONIC FISCAL RECEIPT
-                    </span>
-                    <span className="text-emerald-700 font-mono font-black">VERIFIED</span>
-                  </div>
-                  <div className="flex justify-between text-slate-600 text-[10px] font-mono">
-                    <span>VFD No: {receiptModal.fiscalInformation?.fiscalReceiptNo || receiptModal.receiptNo}</span>
-                    <span>EFD: {receiptModal.fiscalInformation?.fiscalDevice || receiptModal.fiscalDevice || settings.vfdDeviceId}</span>
-                  </div>
-                  <div className="text-center bg-slate-900 text-emerald-400 font-mono text-[10px] py-1 rounded font-bold tracking-wider">
-                    {receiptModal.fiscalInformation?.verificationCode || `TRA-VFD-${Math.floor(10000 + Math.random() * 90000)}-TZ`}
-                  </div>
-                </div>
+              {/* Items Table */}
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider border-b border-slate-100 pb-1">
+                    <th className="py-1">#</th>
+                    <th className="py-1">Item Description</th>
+                    <th className="py-1 text-center">Qty</th>
+                    <th className="py-1 text-right">Price</th>
+                    <th className="py-1 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100/70 font-medium">
+                  {receiptModal.items.map((item: CartItem, i: number) => (
+                    <tr key={item.product.id || i} className="text-[11.5px]">
+                      <td className="py-1.5 text-slate-400 font-bold text-[10px]">{i + 1}</td>
+                      <td className="py-1.5 font-bold text-slate-800">
+                        {item.product.name}
+                        {item.product.sku && <div className="text-[9.5px] text-slate-400 font-mono font-normal">{item.product.sku}</div>}
+                      </td>
+                      <td className="py-1.5 text-center font-mono text-slate-600">{item.quantity}x</td>
+                      <td className="py-1.5 text-right font-mono text-slate-600">{formatCurrency(item.product.price)}</td>
+                      <td className="py-1.5 text-right font-black text-slate-900 font-mono">{formatCurrency(item.product.price * Number(item.quantity))}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
-                {/* FOOTER */}
-                <div className="text-center text-slate-400 text-[10.5px] pt-1">
-                  <p className="font-bold text-slate-700">{receiptModal.receiptFooter || 'Asante kwa kununua nasi • Thank you for shopping with us!'}</p>
+              <div className="border-t border-dashed border-slate-200" />
+
+              {/* Financial Totals */}
+              <div className="space-y-1 text-[11.5px]">
+                <div className="flex justify-between text-slate-500">
+                  <span>Subtotal (Net)</span>
+                  <span className="font-mono font-bold text-slate-800">{formatCurrency(receiptModal.rawSubtotal)}</span>
+                </div>
+                <div className="flex justify-between text-slate-400 text-[10.5px]">
+                  <span>{receiptModal.vatRate || '18'}% TRA VAT Tax (Included)</span>
+                  <span className="font-mono">{formatCurrency(receiptModal.vatTax)}</span>
+                </div>
+                <div className="flex justify-between items-center font-black text-sm pt-1.5 border-t border-slate-100 text-slate-900">
+                  <span>Grand Total</span>
+                  <span className="font-mono text-[#4f46e5] text-base">{formatCurrency(receiptModal.grandTotal)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 text-[11px]">
+                  <span className="text-slate-500 font-medium">Payment Mode:</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                    {receiptModal.paymentMethod}
+                  </span>
+                </div>
+                {receiptModal.paymentMethod === 'Cash' && (
+                  <div className="flex justify-between text-[10.5px] text-slate-500 pt-0.5 font-mono">
+                    <span>Paid: <strong>{formatCurrency(receiptModal.numericPaid)}</strong></span>
+                    <span>Change: <strong className="text-emerald-600">{formatCurrency(receiptModal.cashChange)}</strong></span>
+                  </div>
+                )}
+              </div>
+
+              <div className="border-t border-dashed border-slate-200" />
+
+              {/* TRA VFD Fiscal Status Footer */}
+              <div className="bg-emerald-50/80 rounded-xl p-2.5 border border-emerald-200/80 text-[10.5px] space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-emerald-900 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    TRA VFD Verified
+                  </span>
+                  <span className="font-mono font-bold text-emerald-950 text-[10px]">
+                    {receiptModal.fiscalInformation?.fiscalReceiptNo || receiptModal.receiptNo}
+                  </span>
+                </div>
+                <div className="flex justify-between text-emerald-800/80 text-[9.5px] font-mono">
+                  <span>EFD Serial: {receiptModal.fiscalInformation?.fiscalDevice || receiptModal.fiscalDevice || settings.vfdDeviceId}</span>
+                  <span>Code: {receiptModal.fiscalInformation?.verificationCode || `TRA-VFD-${Math.floor(10000 + Math.random() * 90000)}`}</span>
                 </div>
               </div>
+
+              {/* Footer Note */}
+              <p className="text-center text-[10px] text-slate-400 font-medium pt-1">
+                {receiptModal.receiptFooter || 'Asante kwa kununua nasi! • Thank you for shopping with us!'}
+              </p>
             </div>
 
-            {/* 3. STICKY BOTTOM ACTION BAR */}
-            <div className="px-4 sm:px-6 py-3 border-t border-slate-100 bg-slate-50/90 backdrop-blur-sm flex flex-wrap sm:flex-nowrap gap-2 flex-shrink-0 print:hidden">
+            {/* Modal Bottom Actions */}
+            <div className="p-3 border-t border-slate-100 bg-slate-50/60 flex items-center gap-2 flex-shrink-0">
               <button
+                type="button"
                 onClick={handleCancelOrModifySale}
-                className="flex-1 min-w-[110px] py-2.5 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
-                title="Cancel receipt and return to cart to add/remove items"
+                className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs transition-all flex items-center justify-center space-x-1 cursor-pointer"
+                title="Modify Cart"
               >
                 <RotateCcw className="w-3.5 h-3.5 text-slate-500" />
-                <span>Modify / Back</span>
+                <span>Modify</span>
               </button>
-
               <button
+                type="button"
                 onClick={() => posService.printReceiptOnly('printable-receipt')}
-                className="flex-1 min-w-[90px] py-2.5 bg-slate-200 hover:bg-slate-300 text-slate-800 font-bold text-xs rounded-xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
+                className="px-3 py-2 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs transition-all flex items-center justify-center space-x-1 cursor-pointer"
               >
-                <Printer className="w-3.5 h-3.5 text-slate-700" />
+                <Printer className="w-3.5 h-3.5 text-slate-600" />
                 <span>Print</span>
               </button>
-
               <button
+                type="button"
                 onClick={async () => {
                   try {
-                    setDownloadNotice(`Downloading Official PDF Receipt (${receiptModal.receiptNo})...`);
+                    setDownloadNotice(`Downloading PDF Receipt (${receiptModal.receiptNo})...`);
                     await posService.downloadReceiptPdf(receiptModal.receiptNo, `Receipt-${receiptModal.receiptNo}.pdf`, receiptModal);
                     setTimeout(() => setDownloadNotice(null), 3000);
                   } catch (err) {
@@ -1272,15 +1534,15 @@ export default function CashierPOSView({ onSaleComplete, externalCartItem }: Cas
                     setTimeout(() => setDownloadNotice(null), 4000);
                   }
                 }}
-                className="flex-1 min-w-[110px] py-2.5 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
+                className="px-3 py-2 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-bold text-xs rounded-xl transition-all flex items-center justify-center space-x-1 cursor-pointer"
               >
-                <Download className="w-3.5 h-3.5 text-blue-600" />
-                <span>Download PDF</span>
+                <Download className="w-3.5 h-3.5 text-indigo-600" />
+                <span>Download</span>
               </button>
-
               <button
+                type="button"
                 onClick={handleFinishSale}
-                className="flex-1 min-w-[110px] py-2.5 bg-gradient-to-r from-blue-600 to-sky-500 hover:from-blue-700 hover:to-sky-600 text-white font-bold text-xs rounded-xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="flex-1 py-2 px-3 bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center space-x-1 cursor-pointer"
               >
                 <span>Next Sale</span>
                 <ArrowRight className="w-3.5 h-3.5" />

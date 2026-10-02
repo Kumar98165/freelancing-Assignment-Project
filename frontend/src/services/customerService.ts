@@ -103,6 +103,11 @@ export const customerService = {
     return res.data.data.customer;
   },
 
+  async getCustomerProfile(id: string): Promise<{ customer: CustomerRecord; kpi: { totalOrders: number; totalOrdersLabel: string; totalSpent: number; avgOrderValue: number; lastPurchase: string } }> {
+    const res = await apiClient.get<{ success: boolean; data: { customer: CustomerRecord; kpi: any } }>(`/customers/${id}/profile`);
+    return res.data.data;
+  },
+
   async createCustomer(data: CreateCustomerData): Promise<CustomerRecord> {
     const res = await apiClient.post<{ success: boolean; message: string; data: { customer: CustomerRecord } }>('/customers', data);
     return res.data.data.customer;

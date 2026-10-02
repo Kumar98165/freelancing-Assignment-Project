@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Search, Eye, Printer, ShieldCheck,
   X, Filter, DollarSign,
   Receipt, TrendingUp, CheckCircle2,
   Calendar, CreditCard, Download,
   Smartphone, Banknote, Sparkles, RotateCcw,
-  ShoppingCart
+  ShoppingCart, Loader2
 } from 'lucide-react';
 import { KPICard, Pagination } from '../common';
 import posService from '../../services/posService';
@@ -183,10 +183,20 @@ export type DatePresetType = 'ALL' | 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'TH
 
 export default function CashierSalesView() {
   const { settings } = useSettings();
-  const [sales] = useState<SaleRecord[]>(mockSalesData);
+  const [sales, setSales] = useState<SaleRecord[]>([]);
+  const [statsData, setStatsData] = useState<{
+    totalRevenue: number;
+    totalTransactions: number;
+    avgOrderValue: number;
+    fiscalSyncRate: number;
+    fiscalSuccessCount: number;
+  } | null>(null);
+
+  const [isLoading, setIsLoading] = useState(true);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [cashierFilter, setCashierFilter] = useState('ALL');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('ALL');
   const [fiscalStatusFilter, setFiscalStatusFilter] = useState('ALL');
@@ -202,6 +212,8 @@ export default function CashierSalesView() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 10;
 
   // Modals & Notifications
@@ -213,36 +225,70 @@ export default function CashierSalesView() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const formatTZS = (val: number) => `TSh ${val.toLocaleString()}`;
+  const formatTZS = (val: number) => `TSh ${(val || 0).toLocaleString()}`;
 
-  // Filter Logic
-  const filteredSales = sales.filter(sale => {
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch = !q ||
-      sale.id.toLowerCase().includes(q) ||
-      sale.customer.toLowerCase().includes(q) ||
-      sale.cashier.toLowerCase().includes(q);
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-    const matchesCashier = cashierFilter === 'ALL' || sale.cashier === cashierFilter;
-    const matchesPayment = paymentMethodFilter === 'ALL' || sale.paymentMethod === paymentMethodFilter;
-    const matchesFiscal = fiscalStatusFilter === 'ALL' || sale.fiscalStatus === fiscalStatusFilter;
+  // Reset page when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, cashierFilter, paymentMethodFilter, fiscalStatusFilter, datePreset, startDate, endDate]);
 
-    const matchesStart = !startDate || sale.date >= startDate;
-    const matchesEnd = !endDate || sale.date <= endDate;
-    const matchesDate = matchesStart && matchesEnd;
+  // Live Backend Data Fetching
+  const fetchSalesData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const params: any = {
+        search: debouncedSearch.trim() || undefined,
+        cashier: cashierFilter !== 'ALL' ? cashierFilter : undefined,
+        paymentMethod: paymentMethodFilter !== 'ALL' ? paymentMethodFilter : undefined,
+        fiscalStatus: fiscalStatusFilter !== 'ALL' ? fiscalStatusFilter : undefined,
+        dateFilter: datePreset !== 'ALL' ? datePreset : undefined,
+        startDate: datePreset === 'CUSTOM' && startDate ? startDate : undefined,
+        endDate: datePreset === 'CUSTOM' && endDate ? endDate : undefined,
+        page: currentPage,
+        limit: itemsPerPage
+      };
 
-    return matchesSearch && matchesCashier && matchesPayment && matchesFiscal && matchesDate;
-  });
+      const res = await posService.getSales(params);
+      if (res && res.sales) {
+        setSales(res.sales);
+        setTotalItems(res.total || res.sales.length);
+        setTotalPages(res.totalPages || 1);
+        if (res.stats) {
+          setStatsData(res.stats);
+        }
+      } else {
+        setSales(mockSalesData);
+        setTotalItems(mockSalesData.length);
+        setTotalPages(1);
+      }
+    } catch (err) {
+      console.warn('Backend API offline or unreachable, using fallback sales:', err);
+      setSales(mockSalesData);
+      setTotalItems(mockSalesData.length);
+      setTotalPages(1);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [debouncedSearch, cashierFilter, paymentMethodFilter, fiscalStatusFilter, datePreset, startDate, endDate, currentPage]);
 
-  const totalPages = Math.ceil(filteredSales.length / itemsPerPage) || 1;
-  const paginatedSales = filteredSales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  useEffect(() => {
+    fetchSalesData();
+  }, [fetchSalesData]);
 
-  // KPI Calculations
-  const totalRevenue = filteredSales.reduce((sum, s) => sum + s.total, 0);
-  const totalTransactions = filteredSales.length;
-  const avgOrderValue = totalTransactions > 0 ? Math.round(totalRevenue / totalTransactions) : 0;
-  const fiscalSuccessCount = filteredSales.filter(s => s.fiscalStatus === 'SUCCESS').length;
-  const fiscalSyncRate = totalTransactions > 0 ? Math.round((fiscalSuccessCount / totalTransactions) * 100) : 0;
+  // Dynamic KPI Calculations from backend or fallback
+  const totalRevenue = statsData?.totalRevenue ?? sales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const totalTransactions = statsData?.totalTransactions ?? totalItems;
+  const avgOrderValue = statsData?.avgOrderValue ?? (totalTransactions > 0 ? Math.round(totalRevenue / totalTransactions) : 0);
+  const fiscalSuccessCount = statsData?.fiscalSuccessCount ?? sales.filter(s => s.fiscalStatus === 'SUCCESS').length;
+  const fiscalSyncRate = statsData?.fiscalSyncRate ?? (totalTransactions > 0 ? Math.round((fiscalSuccessCount / totalTransactions) * 100) : 100);
 
   const handleDatePresetChange = (preset: DatePresetType) => {
     setDatePreset(preset);
@@ -435,7 +481,7 @@ Security Key    : ${sale.verificationCode}
           icon={Receipt}
           color="blue"
           badge={{
-            text: `${filteredSales.reduce((sum, s) => sum + s.itemsCount, 0)} items sold`,
+            text: `${sales.reduce((sum, s) => sum + (s.itemsCount || 0), 0)} items sold`,
             isPositive: true,
           }}
           subtitle="Completed checkout orders"
@@ -572,7 +618,16 @@ Security Key    : ${sale.verificationCode}
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-100/90">
-              {paginatedSales.length === 0 ? (
+              {isLoading ? (
+                <tr>
+                  <td colSpan={9} className="py-20 text-center text-slate-400 text-xs font-bold">
+                    <div className="flex items-center justify-center space-x-2">
+                      <Loader2 className="w-5 h-5 text-[#4f46e5] animate-spin" />
+                      <span>Loading sales transactions...</span>
+                    </div>
+                  </td>
+                </tr>
+              ) : sales.length === 0 ? (
                 <tr>
                   <td colSpan={9} className="py-28 text-center text-slate-400 text-xs font-bold">
                     <Receipt className="w-8 h-8 mx-auto text-slate-300 mb-2" />
@@ -580,7 +635,7 @@ Security Key    : ${sale.verificationCode}
                   </td>
                 </tr>
               ) : (
-                paginatedSales.map((sale) => (
+                sales.map((sale) => (
                   <tr key={sale.id} className="hover:bg-indigo-50/25 transition-colors group">
                     {/* SALE NUMBER */}
                     <td className="py-3 px-4 whitespace-nowrap font-mono text-xs font-extrabold text-slate-900 group-hover:text-indigo-600 transition-colors">
@@ -663,7 +718,7 @@ Security Key    : ${sale.verificationCode}
           <Pagination
             currentPage={currentPage}
             totalPages={totalPages}
-            totalItems={filteredSales.length}
+            totalItems={totalItems}
             itemsPerPage={itemsPerPage}
             onPageChange={setCurrentPage}
             itemLabel="sales transactions"
@@ -672,150 +727,151 @@ Security Key    : ${sale.verificationCode}
       </div>
 
       {/* FISCAL RECEIPT MODAL */}
+      {/* ULTRA-CLEAN MODERN RECEIPT MODAL */}
       {selectedSale && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md z-50 flex items-center justify-center p-4 overflow-y-auto">
-          <div className="bg-white/95 backdrop-blur-2xl rounded-3xl max-w-xl w-full p-6 sm:p-8 shadow-2xl border border-white text-slate-800 space-y-5 my-auto max-h-[92vh] overflow-y-auto print:max-h-none print:shadow-none print:border-none print:p-0">
-            {/* RECEIPT TOOLBAR */}
-            <div className="flex items-center justify-between border-b border-slate-100 pb-3.5 print:hidden">
-              <div className="flex items-center space-x-2">
-                <div className="w-9 h-9 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
-                  <Receipt className="w-5 h-5" />
+        <div
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
+          onClick={() => setSelectedSale(null)}
+        >
+          <div
+            className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200/90 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-150 relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-slate-50/60">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-8 h-8 rounded-lg bg-[#4f46e5] text-white flex items-center justify-center font-black text-sm shadow-xs">
+                  TZ
                 </div>
                 <div>
-                  <h3 className="font-extrabold text-sm text-slate-900">Sale Transaction Receipt</h3>
-                  <p className="text-[11px] font-medium text-emerald-600">Official Supermarket & TRA Fiscal Record</p>
+                  <h3 className="text-sm font-black text-slate-900 tracking-tight leading-none">TZA MART TANZANIA</h3>
+                  <p className="text-[10px] text-slate-500 font-medium mt-0.5">Mlimani City Mall, Dar es Salaam</p>
                 </div>
               </div>
               <button
+                type="button"
                 onClick={() => setSelectedSale(null)}
-                className="p-2 text-slate-400 hover:text-slate-600 rounded-xl hover:bg-slate-100 transition-all cursor-pointer"
-                title="Close Receipt"
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 transition-colors cursor-pointer"
+                title="Close"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4.5 h-4.5" />
               </button>
             </div>
 
-            {/* CLEAN PRINTABLE RECEIPT CONTENT */}
-            <div id="sales-printable-receipt" className="space-y-4 font-sans bg-white p-4 sm:p-5 rounded-2xl border border-slate-100">
-              {/* STORE HEADER */}
-              <div className="text-center space-y-1 pb-3 border-b border-dashed border-slate-300">
-                <div className="w-10 h-10 bg-gradient-to-tr from-blue-600 to-sky-400 rounded-xl mx-auto flex items-center justify-center text-white shadow-sm mb-1.5">
-                  <ShoppingCart className="w-5 h-5" />
-                </div>
-                <h2 className="font-black text-lg text-slate-900 tracking-tight">TZA MART TANZANIA</h2>
-                <p className="text-xs text-slate-600 font-medium">Mlimani City Mall, Sam Nujoma Road, Dar es Salaam</p>
-                <div className="text-[11px] text-slate-500 font-mono flex items-center justify-center space-x-2 pt-0.5">
-                  <span>TIN: <strong className="text-slate-700">102-394-857</strong></span>
-                  <span>•</span>
-                  <span>VRN: <strong className="text-slate-700">40012983-Z</strong></span>
-                </div>
+            {/* Scrollable Printable Receipt Body */}
+            <div id="sales-printable-receipt" className="flex-1 overflow-y-auto px-5 py-3.5 space-y-3 text-slate-800 text-xs bg-white">
+              {/* TIN & VRN */}
+              <div className="text-[10px] text-slate-500 font-mono text-center pb-1">
+                TIN: <strong className="text-slate-700 font-bold">102-394-857</strong> | VRN: <strong className="text-slate-700 font-bold">40012983-Z</strong>
               </div>
 
-              {/* TRANSACTION METADATA */}
-              <div className="bg-slate-50 rounded-xl p-3 border border-slate-200 text-xs">
-                <div className="grid grid-cols-2 gap-2 text-[11px]">
-                  <div>
-                    <span className="text-slate-400 font-medium">Receipt No:</span>
-                    <p className="font-bold text-slate-900 font-mono">{selectedSale.id}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-slate-400 font-medium">Date & Time:</span>
-                    <p className="font-bold text-slate-900">{selectedSale.date} {selectedSale.time}</p>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 font-medium">Cashier:</span>
-                    <p className="font-bold text-slate-900 truncate">{selectedSale.cashier}</p>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-slate-400 font-medium">Payment Mode:</span>
-                    <p className="font-bold text-slate-900">{selectedSale.paymentMethod} {selectedSale.provider ? `(${selectedSale.provider})` : ''}</p>
-                  </div>
-                </div>
+              <div className="border-t border-dashed border-slate-200" />
+
+              {/* Transaction Meta */}
+              <div className="grid grid-cols-2 gap-y-1.5 text-[11px] font-medium text-slate-600">
+                <div>Receipt #: <span className="font-mono font-bold text-slate-900">{selectedSale.id}</span></div>
+                <div>Date: <span className="font-mono text-slate-900">{selectedSale.date} {selectedSale.time}</span></div>
+                <div>Customer: <span className="font-bold text-slate-900">{selectedSale.customer}</span></div>
+                <div>Cashier: <span className="font-bold text-slate-900">{selectedSale.cashier}</span></div>
               </div>
 
-              {/* ITEM TABLE */}
-              <div className="pt-1">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="text-slate-400 font-bold border-b border-slate-200 pb-1.5 text-[10px] uppercase">
-                      <th className="pb-1.5">Item</th>
-                      <th className="pb-1.5 text-center">Qty</th>
-                      <th className="pb-1.5 text-right">Price</th>
-                      <th className="pb-1.5 text-right">Total</th>
+              <div className="border-t border-dashed border-slate-200" />
+
+              {/* Items Table */}
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider border-b border-slate-100 pb-1">
+                    <th className="py-1">#</th>
+                    <th className="py-1">Item Description</th>
+                    <th className="py-1 text-center">Qty</th>
+                    <th className="py-1 text-right">Price</th>
+                    <th className="py-1 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100/70 font-medium">
+                  {selectedSale.items.map((item, i) => (
+                    <tr key={i} className="text-[11.5px]">
+                      <td className="py-1.5 text-slate-400 font-bold text-[10px]">{i + 1}</td>
+                      <td className="py-1.5 font-bold text-slate-800">{item.product}</td>
+                      <td className="py-1.5 text-center font-mono text-slate-600">{item.quantity}x</td>
+                      <td className="py-1.5 text-right font-mono text-slate-600">{formatTZS(item.unitPrice)}</td>
+                      <td className="py-1.5 text-right font-black text-slate-900 font-mono">{formatTZS(item.total)}</td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium text-slate-800 text-[11px]">
-                    {selectedSale.items.map((it, idx) => (
-                      <tr key={idx}>
-                        <td className="py-2 pr-2">
-                          <p className="font-bold text-slate-900">{it.product}</p>
-                        </td>
-                        <td className="py-2 text-center font-bold text-slate-900">{it.quantity}</td>
-                        <td className="py-2 text-right font-mono text-slate-600">{formatTZS(it.unitPrice)}</td>
-                        <td className="py-2 text-right font-bold text-slate-900 font-mono">{formatTZS(it.total)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
 
-              {/* FINANCIAL TOTALS */}
-              <div className="border-t border-slate-200 pt-2.5 space-y-1 text-xs">
-                <div className="flex justify-between text-slate-600 text-[11px]">
-                  <span>Subtotal (Excl. VAT):</span>
-                  <span className="font-mono font-bold text-slate-900">{formatTZS(selectedSale.subtotal)}</span>
-                </div>
-                <div className="flex justify-between text-slate-500 text-[11px]">
-                  <span>18% TRA VAT (Included):</span>
-                  <span className="font-mono text-slate-700">{formatTZS(selectedSale.tax)}</span>
-                </div>
-                <div className="flex justify-between font-black text-sm py-1.5 border-t border-b border-slate-200 text-slate-900 bg-slate-50 px-2 rounded-lg my-1">
-                  <span>TOTAL PAID:</span>
-                  <span className="font-mono text-blue-600 text-base">{formatTZS(selectedSale.total)}</span>
-                </div>
-              </div>
+              <div className="border-t border-dashed border-slate-200" />
 
-              {/* COMPACT TRA FISCAL VERIFICATION */}
-              <div className="bg-emerald-50 rounded-xl p-2.5 border border-emerald-200 text-[11px] space-y-1">
-                <div className="flex items-center justify-between text-emerald-800 font-bold text-[10px]">
-                  <span className="flex items-center">
-                    <ShieldCheck className="w-3.5 h-3.5 mr-1 text-emerald-600" />
-                    TRA ELECTRONIC FISCAL RECEIPT
+              {/* Financial Totals */}
+              <div className="space-y-1 text-[11.5px]">
+                <div className="flex justify-between text-slate-500">
+                  <span>Subtotal (Net)</span>
+                  <span className="font-mono font-bold text-slate-800">{formatTZS(selectedSale.subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-slate-400 text-[10.5px]">
+                  <span>18% TRA VAT Tax (Included)</span>
+                  <span className="font-mono">{formatTZS(selectedSale.tax)}</span>
+                </div>
+                <div className="flex justify-between items-center font-black text-sm pt-1.5 border-t border-slate-100 text-slate-900">
+                  <span>Grand Total</span>
+                  <span className="font-mono text-[#4f46e5] text-base">{formatTZS(selectedSale.total)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 text-[11px]">
+                  <span className="text-slate-500 font-medium">Payment Mode:</span>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-700">
+                    {selectedSale.paymentMethod} {selectedSale.provider ? `(${selectedSale.provider})` : ''}
                   </span>
-                  <span className="text-emerald-700 font-mono font-black">VERIFIED</span>
-                </div>
-                <div className="flex justify-between text-slate-600 text-[10px] font-mono">
-                  <span>VFD No: {selectedSale.fiscalReceiptNo}</span>
-                  <span>EFD: {selectedSale.fiscalDevice}</span>
-                </div>
-                <div className="text-center bg-slate-900 text-emerald-400 font-mono text-[10px] py-1 rounded font-bold tracking-wider">
-                  {selectedSale.verificationCode}
                 </div>
               </div>
 
-              {/* FOOTER */}
-              <div className="text-center text-slate-400 text-[10.5px] pt-1">
-                <p className="font-bold text-slate-700">Asante kwa kununua nasi • Thank you for shopping with us!</p>
+              <div className="border-t border-dashed border-slate-200" />
+
+              {/* TRA VFD Fiscal Status Footer */}
+              <div className="bg-emerald-50/80 rounded-xl p-2.5 border border-emerald-200/80 text-[10.5px] space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-emerald-900 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    TRA VFD Verified
+                  </span>
+                  <span className="font-mono font-bold text-emerald-950 text-[10px]">{selectedSale.fiscalReceiptNo}</span>
+                </div>
+                <div className="flex justify-between text-emerald-800/80 text-[9.5px] font-mono">
+                  <span>EFD Serial: {selectedSale.fiscalDevice}</span>
+                  <span>Code: {selectedSale.verificationCode}</span>
+                </div>
               </div>
+
+              {/* Footer Note */}
+              <p className="text-center text-[10px] text-slate-400 font-medium pt-1">
+                Asante kwa kununua nasi! • Thank you for shopping with us!
+              </p>
             </div>
 
-            {/* MODAL BOTTOM ACTIONS */}
-            <div className="flex space-x-2 pt-2 border-t border-slate-100 print:hidden">
+            {/* Modal Bottom Actions */}
+            <div className="p-3.5 border-t border-slate-100 bg-slate-50/60 flex items-center space-x-2.5 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => posService.printReceiptOnly('sales-printable-receipt')}
-                className="flex-1 py-3 bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-xs rounded-2xl transition-all flex items-center justify-center space-x-1.5 cursor-pointer shadow-2xs"
+                className="flex-1 py-2.5 px-3 bg-white hover:bg-slate-100 text-slate-700 font-bold text-xs rounded-xl border border-slate-200 shadow-2xs transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
               >
-                <Printer className="w-4 h-4 text-slate-700" />
-                <span>Print Receipt</span>
+                <Printer className="w-4 h-4 text-slate-600" />
+                <span>Print</span>
               </button>
               <button
                 type="button"
                 onClick={() => handleDownloadReceipt(selectedSale)}
-                className="flex-1 py-3 bg-gradient-to-r from-blue-600 to-sky-500 hover:from-blue-700 hover:to-sky-600 text-white font-bold text-xs rounded-2xl shadow-md shadow-blue-500/20 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
+                className="flex-1 py-2.5 px-3 bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] hover:opacity-95 text-white font-bold text-xs rounded-xl shadow-md shadow-indigo-500/20 transition-all flex items-center justify-center space-x-1.5 cursor-pointer"
               >
                 <Download className="w-4 h-4" />
-                <span>Download PDF Receipt</span>
+                <span>Download</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSelectedSale(null)}
+                className="py-2.5 px-4 bg-slate-200/70 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Close
               </button>
             </div>
           </div>

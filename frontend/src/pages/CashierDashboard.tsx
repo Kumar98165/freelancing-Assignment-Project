@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
   ShoppingCart, LogOut, DollarSign, CreditCard,
-  Menu, Calendar, Clock,
+  Menu, Calendar, Clock, Bell,
   LayoutDashboard, LayoutGrid, Package, Warehouse, History, Users, Settings, ArrowRight,
   Store, Box, Activity, TrendingUp
 } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import posService from '../services/posService';
 import { inventoryService } from '../services/inventoryService';
 
@@ -35,9 +35,46 @@ const hourlySalesData = [
 
 export default function CashierDashboard() {
   const navigate = useNavigate();
+  const { tab: routeTab, id: routeId } = useParams<{ tab?: string; id?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  const validTabs = ['dashboard', 'pos', 'categories', 'products', 'inventory', 'sales', 'customers', 'settings'];
+
+  const getInitialTab = () => {
+    const fromRoute = routeTab && validTabs.includes(routeTab) ? routeTab : null;
+    const fromSearch = searchParams.get('tab') && validTabs.includes(searchParams.get('tab')!) ? searchParams.get('tab') : null;
+    if (routeId) return 'customers';
+    if (searchParams.get('id') || searchParams.get('customerId')) return 'customers';
+    const fromStorage = localStorage.getItem('cashier_active_tab');
+    if (fromStorage && validTabs.includes(fromStorage)) return fromStorage;
+    return fromRoute || fromSearch || 'pos';
+  };
 
   // Active View Tab ('dashboard' | 'pos' | 'categories' | 'products' | 'inventory' | 'sales' | 'customers' | 'settings')
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'categories' | 'products' | 'inventory' | 'sales' | 'customers' | 'settings'>('pos');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'pos' | 'categories' | 'products' | 'inventory' | 'sales' | 'customers' | 'settings'>(
+    getInitialTab() as any
+  );
+
+  useEffect(() => {
+    const tabParam = routeTab || searchParams.get('tab');
+    if (routeId || searchParams.get('id') || searchParams.get('customerId')) {
+      setActiveTab('customers');
+    } else if (tabParam && validTabs.includes(tabParam)) {
+      setActiveTab(tabParam as any);
+    }
+  }, [routeTab, routeId, searchParams]);
+
+  const handleTabSelect = (tabId: typeof activeTab) => {
+    setActiveTab(tabId);
+    localStorage.setItem('cashier_active_tab', tabId);
+    setSearchParams(prev => {
+      const updated = new URLSearchParams(prev);
+      updated.set('tab', tabId);
+      updated.delete('id');
+      updated.delete('customerId');
+      return updated;
+    }, { replace: true });
+  };
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(true);
   const [externalCartProduct, setExternalCartProduct] = useState<any>(null);
 
@@ -122,77 +159,54 @@ export default function CashierDashboard() {
     <div className="min-h-screen flex font-sans text-slate-800 overflow-hidden relative" style={{ background: 'linear-gradient(135deg, #eef2fd 0%, #f4f7fe 50%, #f9f6fd 100%)' }}>
 
       {/* LEFT SIDEBAR (Collapsible to compact icon-only mode) */}
-      <aside className={`transition-all duration-300 bg-white/80 backdrop-blur-2xl flex flex-col justify-between z-20 flex-shrink-0 shadow-lg border-r border-slate-100 ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
+      <aside className={`transition-all duration-300 bg-white border-r border-slate-100 flex flex-col justify-between z-20 flex-shrink-0 min-h-screen ${isSidebarOpen ? 'w-64' : 'w-20'}`}>
 
         <div>
-          {/* Logo Brand Header & Toggle Menu Button */}
-          <div className="p-4 flex items-center justify-between border-b border-slate-100">
+          {/* Logo Brand Header */}
+          <div className={`h-20 flex items-center ${isSidebarOpen ? 'justify-between px-6' : 'justify-center px-2'} border-b border-slate-100 transition-all`}>
             <div className="flex items-center space-x-3 overflow-hidden">
-              <div className="w-10 h-10 bg-gradient-to-tr from-[#4f46e5] to-[#7c3aed] rounded-2xl flex items-center justify-center shadow-lg shadow-indigo-500/25 flex-shrink-0">
-                <ShoppingCart className="text-white w-6 h-6" />
+              <div className="w-10 h-10 bg-gradient-to-tr from-[#4f46e5] to-[#9333ea] rounded-xl flex items-center justify-center text-white shadow-md shadow-indigo-500/25 flex-shrink-0">
+                <ShoppingCart className="w-6 h-6" />
               </div>
               {isSidebarOpen && (
-                <div className="whitespace-nowrap">
-                  <h1 className="text-lg font-black tracking-tight text-slate-900 leading-none">TZA Mart</h1>
-                  <p className="text-[11px] font-bold text-slate-400 mt-0.5">Supermarket Management</p>
-                </div>
+                <span className="font-extrabold text-xl text-slate-900 tracking-tight whitespace-nowrap overflow-hidden">
+                  TzSuperPOS
+                </span>
               )}
             </div>
-
-            {/* Menu Toggle Button */}
-            <button
-              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
-              className="p-2 text-slate-600 hover:bg-slate-100 rounded-xl transition-all cursor-pointer flex-shrink-0"
-              title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
-            >
-              <Menu className="w-5 h-5" />
-            </button>
           </div>
 
           {/* Navigation Links */}
-          <nav className="p-3 space-y-1.5">
+          <nav className="px-3 py-3 space-y-1.5">
             {sidebarTabs.map((item) => {
               const active = activeTab === item.id;
               return (
                 <button
                   key={item.id}
-                  onClick={() => setActiveTab(item.id)}
+                  onClick={() => handleTabSelect(item.id)}
                   title={item.name}
-                  className={`w-full flex items-center ${isSidebarOpen ? 'px-4 justify-start' : 'justify-center'} py-3 rounded-2xl font-bold text-xs transition-all cursor-pointer ${active
-                    ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-lg shadow-indigo-500/25 font-extrabold'
-                    : 'text-slate-600 hover:bg-indigo-50/50 hover:text-[#4f46e5]'
+                  className={`w-full flex items-center ${isSidebarOpen ? 'px-4 justify-start' : 'justify-center'} py-3 rounded-2xl font-bold text-sm transition-all cursor-pointer ${active
+                    ? 'bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] text-white shadow-md shadow-indigo-500/25 font-extrabold'
+                    : 'text-slate-600 hover:bg-slate-50 hover:text-[#4f46e5]'
                     }`}
                 >
-                  <item.icon className={`w-5 h-5 ${isSidebarOpen ? 'mr-3' : ''} ${active ? 'text-white' : 'text-slate-500'}`} />
-                  {isSidebarOpen && <span className="whitespace-nowrap">{item.name}</span>}
+                  <item.icon className={`w-5 h-5 flex-shrink-0 ${isSidebarOpen ? 'mr-3' : ''} ${active ? 'text-white' : 'text-slate-500'}`} />
+                  {isSidebarOpen && <span className="whitespace-nowrap overflow-hidden">{item.name}</span>}
                 </button>
               );
             })}
           </nav>
         </div>
 
-        {/* Sidebar Bottom Tanzania Supermarket Card & Logout */}
-        <div className="p-3 space-y-3">
-          {isSidebarOpen && (
-            <div className="bg-white/60 backdrop-blur-xl border border-white p-4 rounded-3xl text-center shadow-sm">
-              <div className="w-10 h-10 bg-blue-50 rounded-2xl mx-auto flex items-center justify-center text-blue-600 mb-2">
-                <ShoppingCart className="w-5 h-5" />
-              </div>
-              <h4 className="font-extrabold text-xs text-slate-900">TZA Mart</h4>
-              <p className="text-[10px] text-slate-500 font-medium mt-0.5">Your Trusted Supermarket in Tanzania</p>
-              <div className="mt-2 inline-flex items-center space-x-1 bg-white px-2.5 py-1 rounded-full text-[10px] font-bold border border-slate-100 shadow-2xs">
-                <span>🇹🇿</span> <span className="text-slate-700">Tanzania Edition</span>
-              </div>
-            </div>
-          )}
-
+        {/* Sidebar Bottom Logout */}
+        <div className="p-3 border-t border-slate-100">
           <button
             onClick={() => navigate('/login')}
             title="Logout"
-            className={`w-full flex items-center ${isSidebarOpen ? 'px-4 justify-start space-x-2' : 'justify-center'} py-3 text-red-600 hover:bg-red-50 font-extrabold text-xs rounded-2xl transition-all cursor-pointer`}
+            className={`w-full flex items-center ${isSidebarOpen ? 'px-4 justify-start space-x-2' : 'justify-center'} py-3 text-red-500 hover:bg-red-50 font-bold text-sm rounded-2xl transition-all cursor-pointer`}
           >
-            <LogOut className="w-5 h-5 text-red-600" />
-            {isSidebarOpen && <span>Logout</span>}
+            <LogOut className="w-5 h-5 text-red-500 flex-shrink-0" />
+            {isSidebarOpen && <span className="whitespace-nowrap">Logout</span>}
           </button>
         </div>
 
@@ -200,6 +214,51 @@ export default function CashierDashboard() {
 
       {/* MAIN CONTAINER */}
       <div className="flex-1 flex flex-col h-screen overflow-hidden z-10 relative transition-all duration-300">
+
+        {/* TOPBAR HEADER */}
+        <header className="h-20 bg-white/70 backdrop-blur-md px-6 sm:px-8 flex items-center justify-between border-b border-slate-200/60 flex-shrink-0">
+
+          {/* Left Title & Collapse Toggle Button */}
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+              className="p-2.5 bg-slate-100 hover:bg-indigo-50 hover:text-[#4f46e5] text-slate-600 rounded-2xl transition-all cursor-pointer shadow-xs"
+              title={isSidebarOpen ? "Collapse Sidebar" : "Expand Sidebar"}
+            >
+              <Menu className="w-5 h-5" />
+            </button>
+            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+              {activeTab === 'pos' ? 'POS (Checkout)' :
+                activeTab === 'categories' ? 'Categories' :
+                  activeTab === 'products' ? 'Products' :
+                    activeTab === 'inventory' ? 'Inventory' :
+                      activeTab === 'sales' ? 'Sales History' :
+                        activeTab === 'customers' ? 'Customers' :
+                          activeTab === 'settings' ? 'Settings' : 'Cashier Dashboard'}
+            </h1>
+          </div>
+
+          <div className="flex items-center space-x-5">
+            <div className="hidden sm:flex items-center space-x-2 bg-slate-100/80 px-3.5 py-1.5 rounded-2xl text-xs font-bold text-slate-700 border border-slate-200/60">
+              <Clock className="w-4 h-4 text-[#4f46e5]" />
+              <span>{currentTime}</span>
+            </div>
+
+            <button className="p-2 text-slate-400 hover:text-slate-600 hover:bg-white rounded-xl transition-all relative cursor-pointer" title="Notifications">
+              <Bell className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center space-x-3 border-l border-slate-200 pl-5">
+              <div className="text-right">
+                <p className="text-sm font-bold text-slate-900 leading-tight">John Cashier</p>
+                <p className="text-xs font-medium text-slate-400">Cashier • Terminal 1</p>
+              </div>
+              <div className="w-10 h-10 rounded-full bg-gradient-to-tr from-[#4f46e5] to-[#9333ea] text-white font-black text-sm flex items-center justify-center shadow-md shadow-indigo-500/20">
+                JC
+              </div>
+            </div>
+          </div>
+        </header>
 
         {/* TAB 1: DASHBOARD OVERVIEW VIEW */}
         {activeTab === 'dashboard' && (

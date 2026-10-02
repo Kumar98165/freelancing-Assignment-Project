@@ -17,26 +17,45 @@ class Customer(db.Model):
 
     @property
     def tier(self):
-        if self.total_purchases >= 1000000:
+        total = sum(p.total for p in self.purchases) if self.purchases else (self.total_purchases or 0.0)
+        if total >= 1000000:
             return 'VIP'
-        elif self.total_purchases >= 100000:
+        elif total >= 100000:
             return 'REGULAR'
         return 'NEW'
 
     def to_dict(self, include_purchases=True):
+        sorted_purchases = sorted(self.purchases, key=lambda p: p.date or datetime.min.date(), reverse=True) if self.purchases else []
+        purchases_dicts = [p.to_dict() for p in sorted_purchases]
+        
+        calc_total = sum(p.total for p in sorted_purchases) if sorted_purchases else float(self.total_purchases or 0.0)
+        order_count = len(sorted_purchases)
+        avg_order = round(calc_total / order_count) if order_count > 0 else 0.0
+        
+        last_date_str = 'No purchases yet'
+        if sorted_purchases and sorted_purchases[0].date:
+            last_date_str = sorted_purchases[0].date.strftime('%Y-%m-%d')
+        elif self.last_purchase:
+            last_date_str = self.last_purchase.strftime('%Y-%m-%d')
+
         data = {
             'id': str(self.id),
             'customerId': f"#CST-{str(self.id).zfill(3)}",
             'name': self.name,
             'phone': self.phone,
             'email': self.email or '',
-            'totalPurchases': float(self.total_purchases or 0),
-            'lastPurchase': self.last_purchase.strftime('%Y-%m-%d') if self.last_purchase else 'No purchases yet',
+            'address': 'Dar es Salaam, TZ',
+            'status': 'Active',
+            'totalPurchases': calc_total,
+            'totalOrders': order_count,
+            'orderCount': order_count,
+            'avgOrderValue': avg_order,
+            'lastPurchase': last_date_str,
             'tier': self.tier,
             'createdDate': self.created_at.strftime('%Y-%m-%d') if self.created_at else ''
         }
         if include_purchases:
-            data['purchases'] = [p.to_dict() for p in self.purchases]
+            data['purchases'] = purchases_dicts
         return data
 
 

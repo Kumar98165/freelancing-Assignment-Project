@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Search, Eye, Edit2, Trash2, CheckCircle2,
   Plus, X, Users, DollarSign, TrendingUp, Award,
@@ -11,6 +12,10 @@ import customerService from '../services/customerService';
 import type { CustomerRecord, CustomerStats } from '../services/customerService';
 
 export default function Customers() {
+  const { id: routeId } = useParams<{ id?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetId = routeId || searchParams.get('id') || searchParams.get('customerId');
+
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [stats, setStats] = useState<CustomerStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,6 +45,43 @@ export default function Customers() {
   const [selectedCustomerDetails, setSelectedCustomerDetails] = useState<CustomerRecord | null>(null);
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
   const [openMenuCustId, setOpenMenuCustId] = useState<string | null>(null);
+
+  // Fetch single customer by ID if opened directly via URL or on refresh
+  useEffect(() => {
+    if (targetId) {
+      if (!selectedCustomerDetails || (selectedCustomerDetails.id !== targetId && selectedCustomerDetails.customerId !== targetId)) {
+        customerService.getCustomerById(targetId)
+          .then(cust => {
+            if (cust) handleOpenProfile(cust);
+          })
+          .catch(() => {
+            const found = customers.find(c => c.id === targetId || c.customerId === targetId);
+            if (found) setSelectedCustomerDetails(found);
+          });
+      }
+    } else if (selectedCustomerDetails && !routeId && !searchParams.get('id') && !searchParams.get('customerId')) {
+      setSelectedCustomerDetails(null);
+    }
+  }, [targetId, customers]);
+
+  const handleOpenProfile = (c: CustomerRecord) => {
+    setSelectedCustomerDetails(c);
+    setSearchParams(prev => {
+      const updated = new URLSearchParams(prev);
+      updated.set('id', c.id);
+      return updated;
+    }, { replace: true });
+  };
+
+  const handleCloseProfile = () => {
+    setSelectedCustomerDetails(null);
+    setSearchParams(prev => {
+      const updated = new URLSearchParams(prev);
+      updated.delete('id');
+      updated.delete('customerId');
+      return updated;
+    }, { replace: true });
+  };
 
   // Form Fields
   const [name, setName] = useState('');
@@ -246,7 +288,7 @@ export default function Customers() {
       {selectedCustomerDetails ? (
         <CustomerProfileView
           customer={selectedCustomerDetails}
-          onBack={() => setSelectedCustomerDetails(null)}
+          onBack={handleCloseProfile}
           onEdit={handleOpenEdit}
           onDelete={(id) => setDeleteConfirmId(id)}
           formatTZS={formatTZS}
@@ -290,8 +332,8 @@ export default function Customers() {
                 isStatsLoading
                   ? '...'
                   : stats?.customerRevenueCompact
-                  ? `TSh ${stats.customerRevenueCompact}`
-                  : formatCompactTZS(stats?.customerRevenue ?? 0)
+                    ? `TSh ${stats.customerRevenueCompact}`
+                    : formatCompactTZS(stats?.customerRevenue ?? 0)
               }
               icon={DollarSign}
               color="emerald"
@@ -309,8 +351,8 @@ export default function Customers() {
                 isStatsLoading
                   ? '...'
                   : stats?.avgLifetimeValueCompact
-                  ? `TSh ${stats.avgLifetimeValueCompact}`
-                  : formatCompactTZS(stats?.avgLifetimeValue ?? 0)
+                    ? `TSh ${stats.avgLifetimeValueCompact}`
+                    : formatCompactTZS(stats?.avgLifetimeValue ?? 0)
               }
               icon={TrendingUp}
               color="purple"
@@ -495,11 +537,10 @@ export default function Customers() {
                           {/* Name with Avatar */}
                           <td className="py-3 px-3 whitespace-nowrap">
                             <div className="flex items-center space-x-2.5">
-                              <div className={`w-8 h-8 rounded-full text-white flex items-center justify-center font-bold text-xs shadow-xs flex-shrink-0 ${
-                                isVIP
+                              <div className={`w-8 h-8 rounded-full text-white flex items-center justify-center font-bold text-xs shadow-xs flex-shrink-0 ${isVIP
                                   ? 'bg-gradient-to-tr from-amber-500 to-orange-500'
                                   : 'bg-gradient-to-tr from-indigo-500 to-purple-500'
-                              }`}>
+                                }`}>
                                 {cust.name.charAt(0).toUpperCase()}
                               </div>
                               <div>
@@ -578,7 +619,7 @@ export default function Customers() {
                                       onClick={(e) => {
                                         e.stopPropagation();
                                         setOpenMenuCustId(null);
-                                        setSelectedCustomerDetails(cust);
+                                        handleOpenProfile(cust);
                                       }}
                                       className="w-full px-3.5 py-2 text-left text-xs font-bold text-slate-700 hover:bg-indigo-50 hover:text-[#4f46e5] flex items-center space-x-2.5 transition-colors cursor-pointer"
                                     >

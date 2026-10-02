@@ -199,7 +199,8 @@ export const posService = {
       y += 6;
 
       // Financials
-      const vat = receiptData?.vatTax || Math.round(subtotal * 0.18);
+      const currentVatRate = Number(receiptData?.vatRate) || 18;
+      const vat = receiptData?.vatTax ?? Math.round(subtotal * (currentVatRate / 100));
       const grand = receiptData?.grandTotal || (subtotal + vat);
       const paid = receiptData?.numericPaid || grand;
       const change = receiptData?.cashChange || Math.max(0, paid - grand);

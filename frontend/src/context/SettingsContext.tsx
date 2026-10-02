@@ -30,7 +30,7 @@ interface SettingsContextValue {
 const SettingsContext = createContext<SettingsContextValue>({
   settings: DEFAULT_SETTINGS,
   isLoading: false,
-  refetch: async () => {},
+  refetch: async () => { },
 });
 
 export function SettingsProvider({ children }: { children: React.ReactNode }) {

@@ -1,7 +1,7 @@
-import { 
-  LayoutDashboard, LayoutGrid, Package, Warehouse, History, 
+import {
+  LayoutDashboard, LayoutGrid, Package, Warehouse, History,
   Users, Activity, LogOut, ShoppingCart, Menu,
-  ChevronRight
+  ChevronRight, ShieldAlert
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -23,12 +23,12 @@ export default function AdminSidebar({ isSidebarOpen, setIsSidebarOpen }: AdminS
     { name: 'Customers', icon: Users, path: '/admin/customers' },
     { name: 'Users / Cashiers', icon: Users, path: '/admin/users' },
     { name: 'Reports', icon: Activity, path: '/admin/reports' },
+    { name: 'Audit Logs', icon: ShieldAlert, path: '/admin/audit-logs' },
   ];
 
   return (
-    <aside className={`transition-all duration-300 bg-white/80 backdrop-blur-2xl flex flex-col justify-between z-20 flex-shrink-0 shadow-lg border-r border-white/80 select-none ${
-      isSidebarOpen ? 'w-64' : 'w-20'
-    }`}>
+    <aside className={`transition-all duration-300 bg-white/80 backdrop-blur-2xl flex flex-col justify-between z-20 flex-shrink-0 shadow-lg border-r border-white/80 select-none ${isSidebarOpen ? 'w-64' : 'w-20'
+      }`}>
       <div>
         {/* Logo Brand Header & Toggle Menu Button */}
         <div className="p-4 flex items-center justify-between border-b border-white/60">
@@ -65,11 +65,10 @@ export default function AdminSidebar({ isSidebarOpen, setIsSidebarOpen }: AdminS
                 key={item.name}
                 to={item.path}
                 title={item.name}
-                className={`w-full flex items-center ${isSidebarOpen ? 'px-4 justify-between' : 'justify-center'} py-3 rounded-2xl font-bold text-xs transition-all ${
-                  active
+                className={`w-full flex items-center ${isSidebarOpen ? 'px-4 justify-between' : 'justify-center'} py-3 rounded-2xl font-bold text-xs transition-all ${active
                     ? 'bg-gradient-to-r from-blue-600 to-sky-500 text-white shadow-lg shadow-blue-500/30 font-extrabold'
                     : 'text-slate-600 hover:bg-white/60 hover:text-blue-600'
-                }`}
+                  }`}
               >
                 <div className="flex items-center">
                   <item.icon className={`w-5 h-5 ${isSidebarOpen ? 'mr-3' : ''} ${active ? 'text-white' : 'text-slate-500'}`} />

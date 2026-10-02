@@ -252,9 +252,19 @@ def process_pos_checkout():
             s_item.sale_id = new_sale.id
             db.session.add(s_item)
 
-        # Update Customer Record if linked
+        # Update Customer Record if linked or auto-create if new
         if customer_id or (customer_phone and customer_phone != '+255 700 000 000'):
             cust = Customer.query.get(customer_id) if customer_id else Customer.query.filter_by(phone=customer_phone).first()
+            if not cust and customer_name and customer_name != 'Walk-in Customer' and customer_phone and customer_phone != '+255 700 000 000':
+                cust = Customer(
+                    name=customer_name,
+                    phone=customer_phone,
+                    total_purchases=0.0,
+                    last_purchase=now.date()
+                )
+                db.session.add(cust)
+                db.session.flush()
+
             if cust:
                 new_sale.customer_id = cust.id
                 cust.total_purchases = (cust.total_purchases or 0.0) + grand_total

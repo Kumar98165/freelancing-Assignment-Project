@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from 'react';
 import {
   LayoutDashboard, LayoutGrid, Package, Warehouse, Users,
-  ShoppingCart, BarChart3, Settings, LogOut, Bell, Menu, PanelLeftClose, PanelLeftOpen
+  ShoppingCart, BarChart3, Settings, LogOut, Bell, Menu, PanelLeftClose, PanelLeftOpen, ShieldAlert
 } from 'lucide-react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 
@@ -24,6 +24,7 @@ export default function AdminLayout({ title, children }: AdminLayoutProps) {
     { name: 'Sales', icon: ShoppingCart, path: '/admin/sales' },
     { name: 'Reports', icon: BarChart3, path: '/admin/reports' },
     { name: 'Users', icon: Users, path: '/admin/users' },
+    { name: 'Audit Logs', icon: ShieldAlert, path: '/admin/audit-logs' },
     { name: 'Settings', icon: Settings, path: '/admin/settings' },
   ];
 

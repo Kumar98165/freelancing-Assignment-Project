@@ -130,12 +130,15 @@ def get_customer_stats():
         total_customers = query.count()
         customers = query.all()
 
-        revenue_sum = sum(c.total_purchases or 0.0 for c in customers)
-        avg_lifetime_value = round(revenue_sum / total_customers) if total_customers > 0 else 0.0
-        vip_count = sum(1 for c in customers if (c.total_purchases or 0.0) >= 1000000)
+        def _cust_total(c):
+            return sum(p.total for p in c.purchases) if c.purchases else float(c.total_purchases or 0.0)
 
-        top_cust = max(customers, key=lambda c: c.total_purchases or 0.0, default=None)
-        top_spender = top_cust.name if top_cust and (top_cust.total_purchases or 0.0) > 0 else 'None'
+        revenue_sum = sum(_cust_total(c) for c in customers)
+        avg_lifetime_value = round(revenue_sum / total_customers) if total_customers > 0 else 0.0
+        vip_count = sum(1 for c in customers if _cust_total(c) >= 1000000)
+
+        top_cust = max(customers, key=lambda c: _cust_total(c), default=None)
+        top_spender = top_cust.name if top_cust and _cust_total(top_cust) > 0 else 'None'
 
         return success_response({
             'totalCustomers': total_customers,
@@ -152,12 +155,24 @@ def get_customer_stats():
 
 
 @customer_bp.route('/<int:customer_id>', methods=['GET'])
+@customer_bp.route('/<int:customer_id>/profile', methods=['GET'])
 @role_required(['ADMIN', 'CASHIER'])
 def get_customer(customer_id):
     customer = Customer.query.get(customer_id)
     if not customer:
         return error_response('Customer not found', 404)
-    return success_response({'customer': customer.to_dict(include_purchases=True)})
+    cust_data = customer.to_dict(include_purchases=True)
+    return success_response({
+        'customer': cust_data,
+        'profile': cust_data,
+        'kpi': {
+            'totalOrders': cust_data['totalOrders'],
+            'totalOrdersLabel': f"{cust_data['totalOrders']} Orders" if cust_data['totalOrders'] != 1 else "1 Order",
+            'totalSpent': cust_data['totalPurchases'],
+            'avgOrderValue': cust_data['avgOrderValue'],
+            'lastPurchase': cust_data['lastPurchase']
+        }
+    })
 
 
 @customer_bp.route('', methods=['POST'])

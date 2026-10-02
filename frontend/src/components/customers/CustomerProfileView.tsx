@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ArrowLeft, Edit2, Trash2, Sparkles, Phone, Mail, MapPin, Calendar,
   Receipt, ShoppingBag, DollarSign, TrendingUp, Clock, Grid3X3,
   Table as TableIcon, History as HistoryIcon, CheckCircle2,
-  CreditCard, Smartphone, Banknote, ArrowUpRight, Eye, Download, Printer, X
+  CreditCard, Smartphone, Banknote, ArrowUpRight, Eye, Download, Printer, X, Loader2
 } from 'lucide-react';
-import type { CustomerRecord, CustomerPurchaseItem, PurchaseItemDetail } from '../../services/customerService';
+import customerService, { type CustomerRecord, type CustomerPurchaseItem, type PurchaseItemDetail } from '../../services/customerService';
 
 interface CustomerProfileViewProps {
   customer: CustomerRecord;
@@ -16,22 +16,55 @@ interface CustomerProfileViewProps {
 }
 
 export default function CustomerProfileView({
-  customer,
+  customer: initialCustomer,
   onBack,
   onEdit,
   onDelete,
   formatTZS,
 }: CustomerProfileViewProps) {
+  const [customerData, setCustomerData] = useState<CustomerRecord>(initialCustomer);
+  const [kpiData, setKpiData] = useState<{
+    totalOrders: number;
+    totalOrdersLabel: string;
+    totalSpent: number;
+    avgOrderValue: number;
+    lastPurchase: string;
+  } | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
   const [activeTab, setActiveTab] = useState<'cards' | 'table' | 'timeline'>('cards');
   const [selectedReceipt, setSelectedReceipt] = useState<CustomerPurchaseItem | null>(null);
 
+  useEffect(() => {
+    let isMounted = true;
+    const loadProfileApi = async () => {
+      if (!initialCustomer?.id) return;
+      try {
+        setIsLoading(true);
+        const res = await customerService.getCustomerProfile(initialCustomer.id);
+        if (isMounted && res) {
+          if (res.customer) setCustomerData(res.customer);
+          if (res.kpi) setKpiData(res.kpi);
+        }
+      } catch (err) {
+        console.warn('Could not load separate profile API stats, fallback to props:', err);
+      } finally {
+        if (isMounted) setIsLoading(false);
+      }
+    };
+    loadProfileApi();
+    return () => { isMounted = false; };
+  }, [initialCustomer.id]);
+
+  const customer = customerData;
   const purchases = customer.purchases || [];
-  const totalSpent = customer.totalPurchases || purchases.reduce((sum: number, p: CustomerPurchaseItem) => sum + p.total, 0);
-  const purchaseCount = purchases.length;
-  const avgOrderValue = purchaseCount > 0 ? Math.round(totalSpent / purchaseCount) : 0;
+  const totalSpent = kpiData?.totalSpent ?? (customer.totalPurchases || purchases.reduce((sum: number, p: CustomerPurchaseItem) => sum + p.total, 0));
+  const purchaseCount = kpiData?.totalOrders ?? purchases.length;
+  const purchaseCountLabel = kpiData?.totalOrdersLabel ?? `${purchaseCount} ${purchaseCount === 1 ? 'Order' : 'Orders'}`;
+  const avgOrderValue = kpiData?.avgOrderValue ?? (purchaseCount > 0 ? Math.round(totalSpent / purchaseCount) : 0);
+  const lastPurchaseStr = kpiData?.lastPurchase ?? (customer.lastPurchase || 'No purchases yet');
+
   const isVIP = totalSpent >= 1000000;
-  const isRegular = totalSpent >= 100000 && totalSpent < 1000000;
-  const custCode = `#CST-${customer.id.length < 3 ? customer.id.padStart(3, '0') : customer.id}`;
+  const custCode = `#CST-${String(customer.id).length < 3 ? String(customer.id).padStart(3, '0') : customer.id}`;
 
   const renderPaymentChip = (method: string) => {
     const m = (method || '').toUpperCase();
@@ -239,7 +272,7 @@ TOTAL AMOUNT : ${formatTZS(receipt.total)}
           <div className="bg-slate-50/70 hover:bg-white p-2.5 rounded-xl border border-slate-200/80 hover:border-blue-200 hover:shadow-xs transition-all flex items-center justify-between">
             <div className="min-w-0">
               <p className="text-[9.5px] font-extrabold text-slate-400 uppercase tracking-wider truncate">Total Purchases</p>
-              <p className="text-sm sm:text-base font-black text-slate-900 leading-tight mt-0.5">{purchaseCount} Orders</p>
+              <p className="text-sm sm:text-base font-black text-slate-900 leading-tight mt-0.5">{purchaseCountLabel}</p>
             </div>
             <div className="w-7 h-7 rounded-lg bg-blue-100/70 text-blue-600 flex items-center justify-center flex-shrink-0 ml-2">
               <ShoppingBag className="w-3.5 h-3.5" />
@@ -272,7 +305,7 @@ TOTAL AMOUNT : ${formatTZS(receipt.total)}
           <div className="bg-slate-50/70 hover:bg-white p-2.5 rounded-xl border border-slate-200/80 hover:border-amber-200 hover:shadow-xs transition-all flex items-center justify-between">
             <div className="min-w-0">
               <p className="text-[9.5px] font-extrabold text-slate-400 uppercase tracking-wider truncate">Last Purchase</p>
-              <p className="text-xs sm:text-sm font-bold text-slate-800 font-mono mt-0.5 truncate">{customer.lastPurchase}</p>
+              <p className="text-xs sm:text-sm font-bold text-slate-800 font-mono mt-0.5 truncate">{lastPurchaseStr}</p>
             </div>
             <div className="w-7 h-7 rounded-lg bg-amber-100/70 text-amber-600 flex items-center justify-center flex-shrink-0 ml-2">
               <Clock className="w-3.5 h-3.5" />

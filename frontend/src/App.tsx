@@ -9,6 +9,7 @@ import Sales from './pages/Sales';
 import Reports from './pages/Reports';
 import UsersPage from './pages/UsersPage';
 import SettingsPage from './pages/SettingsPage';
+import AuditLogs from './pages/AuditLogs';
 
 import CashierDashboard from './pages/CashierDashboard';
 
@@ -23,11 +24,16 @@ function App() {
         <Route path="/admin/categories" element={<Categories />} />
         <Route path="/admin/inventory" element={<Inventory />} />
         <Route path="/admin/customers" element={<Customers />} />
+        <Route path="/admin/customers/:id" element={<Customers />} />
+        <Route path="/customer/:id" element={<Customers />} />
         <Route path="/admin/sales" element={<Sales />} />
         <Route path="/admin/reports" element={<Reports />} />
         <Route path="/admin/users" element={<UsersPage />} />
+        <Route path="/admin/audit-logs" element={<AuditLogs />} />
         <Route path="/admin/settings" element={<SettingsPage />} />
         <Route path="/cashier" element={<CashierDashboard />} />
+        <Route path="/cashier/:tab" element={<CashierDashboard />} />
+        <Route path="/cashier/:tab/:id" element={<CashierDashboard />} />
       </Routes>
     </BrowserRouter>
   );

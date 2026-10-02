@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { useParams, useSearchParams } from 'react-router-dom';
 import {
   Search, Eye, Users, DollarSign, TrendingUp, Award,
   Filter, ArrowUpDown, RotateCcw, CheckCircle2,
@@ -9,6 +10,10 @@ import CustomerProfileView from '../customers/CustomerProfileView';
 import customerService, { type CustomerRecord, type CustomerStats } from '../../services/customerService';
 
 export default function CashierCustomersView() {
+  const { id: routeId } = useParams<{ id?: string }>();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const targetId = routeId || searchParams.get('id') || searchParams.get('customerId');
+
   const [customers, setCustomers] = useState<CustomerRecord[]>([]);
   const [stats, setStats] = useState<CustomerStats | null>(null);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,6 +40,46 @@ export default function CashierCustomersView() {
   // View state
   const [selectedCustomerDetails, setSelectedCustomerDetails] = useState<CustomerRecord | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Fetch single customer by ID if opened directly via URL or on refresh
+  useEffect(() => {
+    if (targetId) {
+      if (!selectedCustomerDetails || (selectedCustomerDetails.id !== targetId && selectedCustomerDetails.customerId !== targetId)) {
+        customerService.getCustomerById(targetId)
+          .then(cust => {
+            if (cust) setSelectedCustomerDetails(cust);
+          })
+          .catch(() => {
+            // fallback search in loaded list
+            const found = customers.find(c => c.id === targetId || c.customerId === targetId);
+            if (found) setSelectedCustomerDetails(found);
+          });
+      }
+    } else if (selectedCustomerDetails && !routeId && !searchParams.get('id') && !searchParams.get('customerId')) {
+      setSelectedCustomerDetails(null);
+    }
+  }, [targetId, customers]);
+
+  const handleOpenProfile = (c: CustomerRecord) => {
+    setSelectedCustomerDetails(c);
+    setSearchParams(prev => {
+      const updated = new URLSearchParams(prev);
+      updated.set('tab', 'customers');
+      updated.set('id', c.id);
+      return updated;
+    }, { replace: true });
+  };
+
+  const handleCloseProfile = () => {
+    setSelectedCustomerDetails(null);
+    setSearchParams(prev => {
+      const updated = new URLSearchParams(prev);
+      updated.set('tab', 'customers');
+      updated.delete('id');
+      updated.delete('customerId');
+      return updated;
+    }, { replace: true });
+  };
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -154,7 +199,7 @@ export default function CashierCustomersView() {
       {selectedCustomerDetails ? (
         <CustomerProfileView
           customer={selectedCustomerDetails}
-          onBack={() => setSelectedCustomerDetails(null)}
+          onBack={handleCloseProfile}
           onEdit={() => { }}
           formatTZS={formatTZS}
         />
@@ -439,7 +484,7 @@ export default function CashierCustomersView() {
                           {/* Profile Action */}
                           <td className="py-3 px-4 whitespace-nowrap text-right text-slate-400">
                             <button
-                              onClick={() => setSelectedCustomerDetails(c)}
+                              onClick={() => handleOpenProfile(c)}
                               title="View Full Customer Profile"
                               className="p-1.5 hover:text-indigo-600 hover:bg-indigo-50 rounded-xl transition-all cursor-pointer inline-flex items-center space-x-1 text-xs font-bold text-indigo-600"
                             >

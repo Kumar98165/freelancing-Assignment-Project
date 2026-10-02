@@ -1,13 +1,14 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   Search, Eye, Printer, ShieldCheck,
   Clock3, X, History as HistoryIcon, Filter, DollarSign,
   Receipt, TrendingUp, CheckCircle2,
   Calendar, CreditCard, ShoppingBag, Download,
-  Smartphone, Banknote, Sparkles
+  Smartphone, Banknote, Sparkles, Loader2
 } from 'lucide-react';
 import AdminLayout from '../components/AdminLayout';
 import { KPICard, Pagination } from '../components/common';
+import posService from '../services/posService';
 
 export interface SaleRecord {
   id: string;
@@ -92,124 +93,26 @@ const mockSalesData: SaleRecord[] = [
     items: [
       { product: 'Tanga Fresh Milk (1L)', quantity: 2, unitPrice: 4000, total: 8000 }
     ]
-  },
-  {
-    id: 'SALE-TZ-2026-00022',
-    date: '2024-12-23',
-    time: '14:25:12',
-    cashier: 'John Masawe',
-    customer: 'Juma Rashid',
-    customerPhone: '+255 754 123 456',
-    itemsCount: 3,
-    subtotal: 53814,
-    tax: 9686,
-    total: 63500,
-    paymentMethod: 'CARD / BANK',
-    provider: 'CRDB Bank',
-    paymentStatus: 'SUCCESS',
-    paymentRef: 'CRDB-TXN-884102',
-    fiscalStatus: 'PENDING',
-    fiscalReceiptNo: 'PENDING-VFD',
-    fiscalDevice: 'EFD-TZ-DAR-001',
-    zNumber: 'Z-2026-0930-01',
-    verificationCode: 'QUEUED-TRA',
-    fiscalDate: '2024-12-23',
-    fiscalTime: '14:25:12',
-    items: [
-      { product: 'Mo Sunflower Cooking Oil (5L)', quantity: 1, unitPrice: 34000, total: 34000 },
-      { product: 'Azam Sugar 5kg', quantity: 2, unitPrice: 12000, total: 24000 },
-      { product: 'Fresh Tanzanian Tomatoes (1KG)', quantity: 1, unitPrice: 5500, total: 5500 }
-    ]
-  },
-  {
-    id: 'SALE-TZ-2026-00021',
-    date: '2024-12-23',
-    time: '14:22:09',
-    cashier: 'Amina Salum',
-    customer: 'Walk-in Customer',
-    customerPhone: '+255 700 000 000',
-    itemsCount: 2,
-    subtotal: 15847,
-    tax: 2853,
-    total: 18700,
-    paymentMethod: 'CASH',
-    paymentStatus: 'SUCCESS',
-    fiscalStatus: 'SUCCESS',
-    fiscalReceiptNo: 'TZ-VFD-2026-00021',
-    fiscalDevice: 'EFD-TZ-DAR-001',
-    zNumber: 'Z-2026-0930-01',
-    verificationCode: 'TRA-VFD-98418-TZ',
-    fiscalDate: '2024-12-23',
-    fiscalTime: '14:22:11',
-    items: [
-      { product: 'Colgate Triple Action Toothpaste', quantity: 2, unitPrice: 4500, total: 9000 },
-      { product: 'Omo Detergent Powder 1kg', quantity: 1, unitPrice: 9700, total: 9700 }
-    ]
-  },
-  {
-    id: 'SALE-TZ-2026-00020',
-    date: '2024-12-23',
-    time: '14:19:33',
-    cashier: 'John Masawe',
-    customer: 'Amina Salum (VIP)',
-    customerPhone: '+255 713 987 654',
-    itemsCount: 2,
-    subtotal: 35593,
-    tax: 6407,
-    total: 42000,
-    paymentMethod: 'MOBILE MONEY',
-    provider: 'Airtel Money',
-    paymentStatus: 'SUCCESS',
-    paymentRef: 'AIRTEL-MO-77341',
-    fiscalStatus: 'PENDING',
-    fiscalReceiptNo: 'PENDING-VFD',
-    fiscalDevice: 'EFD-TZ-DAR-001',
-    zNumber: 'Z-2026-0930-01',
-    verificationCode: 'QUEUED-TRA',
-    fiscalDate: '2024-12-23',
-    fiscalTime: '14:19:33',
-    items: [
-      { product: 'Bakhresa White Rice 10kg', quantity: 1, unitPrice: 32000, total: 32000 },
-      { product: 'Kilimanjaro Drinking Water (1.5L)', quantity: 10, unitPrice: 1000, total: 10000 }
-    ]
-  },
-  {
-    id: 'SALE-TZ-2026-00019',
-    date: '2024-12-22',
-    time: '17:45:10',
-    cashier: 'Peter Karia',
-    customer: 'Godfrey Masawe',
-    customerPhone: '+255 784 555 111',
-    itemsCount: 3,
-    subtotal: 72034,
-    tax: 12966,
-    total: 85000,
-    paymentMethod: 'MOBILE MONEY',
-    provider: 'Mixx by Yas',
-    paymentStatus: 'SUCCESS',
-    paymentRef: 'MIXX-9901-TZ',
-    fiscalStatus: 'SUCCESS',
-    fiscalReceiptNo: 'TZ-VFD-2026-00019',
-    fiscalDevice: 'EFD-TZ-DAR-001',
-    zNumber: 'Z-2026-0922-01',
-    verificationCode: 'TRA-VFD-98405-TZ',
-    fiscalDate: '2024-12-22',
-    fiscalTime: '17:45:12',
-    items: [
-      { product: 'Serengeti Premium Lager (Crate)', quantity: 1, unitPrice: 48000, total: 48000 },
-      { product: 'Mo Sunflower Cooking Oil (5L)', quantity: 1, unitPrice: 34000, total: 34000 },
-      { product: 'Carrier Bag', quantity: 3, unitPrice: 1000, total: 3000 }
-    ]
   }
 ];
 
 export type DatePresetType = 'ALL' | 'TODAY' | 'YESTERDAY' | 'LAST_7_DAYS' | 'THIS_MONTH' | 'CUSTOM';
 
 export default function Sales() {
-  const [sales] = useState<SaleRecord[]>(mockSalesData);
+  const [sales, setSales] = useState<SaleRecord[]>([]);
+  const [statsData, setStatsData] = useState<{
+    totalRevenue: number;
+    totalTransactions: number;
+    avgOrderValue: number;
+    fiscalSyncRate: number;
+    fiscalSuccessCount: number;
+  } | null>(null);
+
+  const [isLoading, setIsLoading] = useState(true);
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [cashierFilter, setCashierFilter] = useState('ALL');
   const [paymentMethodFilter, setPaymentMethodFilter] = useState('ALL');
   const [fiscalStatusFilter, setFiscalStatusFilter] = useState('ALL');
@@ -226,6 +129,8 @@ export default function Sales() {
 
   // Pagination
   const [currentPage, setCurrentPage] = useState(1);
+  const [totalItems, setTotalItems] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
   const itemsPerPage = 10;
 
   // Modals & Notifications
@@ -237,37 +142,103 @@ export default function Sales() {
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const formatTZS = (val: number) => `TSh ${val.toLocaleString()}`;
+  const formatTZS = (val: number) => `TSh ${(val || 0).toLocaleString()}`;
 
-  // Filter Logic
-  const filteredSales = sales.filter(sale => {
-    const q = searchQuery.toLowerCase().trim();
-    const matchesSearch = !q ||
-      sale.id.toLowerCase().includes(q) ||
-      sale.customer.toLowerCase().includes(q) ||
-      sale.cashier.toLowerCase().includes(q);
+  // Debounce search query
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery);
+    }, 250);
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
 
-    const matchesCashier = cashierFilter === 'ALL' || sale.cashier === cashierFilter;
-    const matchesPayment = paymentMethodFilter === 'ALL' || sale.paymentMethod === paymentMethodFilter;
-    const matchesFiscal = fiscalStatusFilter === 'ALL' || sale.fiscalStatus === fiscalStatusFilter;
+  // Reset page when filter changes
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [debouncedSearch, cashierFilter, paymentMethodFilter, fiscalStatusFilter, datePreset, startDate, endDate]);
 
-    // Date Range Matching
-    const matchesStart = !startDate || sale.date >= startDate;
-    const matchesEnd = !endDate || sale.date <= endDate;
-    const matchesDate = matchesStart && matchesEnd;
+  // Live Backend Data Fetching
+  const fetchSalesData = useCallback(async () => {
+    try {
+      setIsLoading(true);
+      const params: any = {
+        search: debouncedSearch.trim() || undefined,
+        cashier: cashierFilter !== 'ALL' ? cashierFilter : undefined,
+        paymentMethod: paymentMethodFilter !== 'ALL' ? paymentMethodFilter : undefined,
+        fiscalStatus: fiscalStatusFilter !== 'ALL' ? fiscalStatusFilter : undefined,
+        dateFilter: datePreset !== 'ALL' ? datePreset : undefined,
+        startDate: datePreset === 'CUSTOM' && startDate ? startDate : undefined,
+        endDate: datePreset === 'CUSTOM' && endDate ? endDate : undefined,
+        page: currentPage,
+        limit: itemsPerPage
+      };
 
-    return matchesSearch && matchesCashier && matchesPayment && matchesFiscal && matchesDate;
-  });
+      const res = await posService.getSales(params);
+      if (res && res.sales) {
+        setSales(res.sales);
+        setTotalItems(res.total || res.sales.length);
+        setTotalPages(res.totalPages || 1);
+        if (res.stats) {
+          setStatsData(res.stats);
+        }
+      } else {
+        setSales(mockSalesData);
+        setTotalItems(mockSalesData.length);
+        setTotalPages(1);
+      }
+    } catch (err) {
+      console.warn('Backend API offline or unreachable, using fallback sales:', err);
+      setSales(mockSalesData);
+      setTotalItems(mockSalesData.length);
+      setTotalPages(1);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [debouncedSearch, cashierFilter, paymentMethodFilter, fiscalStatusFilter, datePreset, startDate, endDate, currentPage]);
 
-  const totalPages = Math.ceil(filteredSales.length / itemsPerPage) || 1;
-  const paginatedSales = filteredSales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+  useEffect(() => {
+    fetchSalesData();
+  }, [fetchSalesData]);
 
-  // KPI Calculations (4 Cards)
-  const totalRevenue = filteredSales.reduce((sum, s) => sum + s.total, 0);
-  const totalTransactions = filteredSales.length;
-  const avgOrderValue = totalTransactions > 0 ? Math.round(totalRevenue / totalTransactions) : 0;
-  const fiscalSuccessCount = filteredSales.filter(s => s.fiscalStatus === 'SUCCESS').length;
-  const fiscalSyncRate = totalTransactions > 0 ? Math.round((fiscalSuccessCount / totalTransactions) * 100) : 0;
+  // Dynamic KPI Calculations from backend or fallback
+  const totalRevenue = statsData?.totalRevenue ?? sales.reduce((sum, s) => sum + (s.total || 0), 0);
+  const totalTransactions = statsData?.totalTransactions ?? totalItems;
+  const avgOrderValue = statsData?.avgOrderValue ?? (totalTransactions > 0 ? Math.round(totalRevenue / totalTransactions) : 0);
+  const fiscalSuccessCount = statsData?.fiscalSuccessCount ?? sales.filter(s => s.fiscalStatus === 'SUCCESS').length;
+  const fiscalSyncRate = statsData?.fiscalSyncRate ?? (totalTransactions > 0 ? Math.round((fiscalSuccessCount / totalTransactions) * 100) : 100);
+
+  // CSV Export Handler
+  const handleExportCSV = () => {
+    if (sales.length === 0) {
+      showToast('No sales records to export.');
+      return;
+    }
+    const headers = ['Sale Number', 'Date', 'Time', 'Cashier', 'Customer', 'Items Count', 'Subtotal (TZS)', 'Tax (TZS)', 'Total Amount (TZS)', 'Payment Method', 'Payment Provider', 'Fiscal Status', 'Fiscal Receipt No'];
+    const rows = sales.map(s => [
+      s.id,
+      s.date,
+      s.time,
+      `"${s.cashier}"`,
+      `"${s.customer}"`,
+      s.itemsCount,
+      s.subtotal,
+      s.tax,
+      s.total,
+      `"${s.paymentMethod}"`,
+      `"${s.provider || ''}"`,
+      s.fiscalStatus,
+      `"${s.fiscalReceiptNo}"`
+    ]);
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', `Sales_Transactions_Audit_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast('Sales audit log exported to CSV successfully!');
+  };
 
   // Handle dropdown selection
   const handleDatePresetChange = (preset: DatePresetType) => {
@@ -427,7 +398,7 @@ Security Key    : ${sale.verificationCode}
 
           <div className="flex items-center space-x-2 self-start sm:self-auto flex-shrink-0">
             <button
-              onClick={() => showToast('Sales audit log exported to CSV.')}
+              onClick={handleExportCSV}
               className="px-4 py-2.5 bg-white border border-slate-200 hover:bg-slate-50 text-slate-700 rounded-2xl text-xs sm:text-sm font-bold transition-all flex items-center space-x-2 shadow-xs cursor-pointer"
             >
               <Download className="w-4 h-4 text-slate-500" />
@@ -457,7 +428,7 @@ Security Key    : ${sale.verificationCode}
             icon={Receipt}
             color="blue"
             badge={{
-              text: `${filteredSales.reduce((sum, s) => sum + s.itemsCount, 0)} items sold`,
+              text: `${sales.reduce((sum, s) => sum + (s.itemsCount || 0), 0)} items sold`,
               isPositive: true,
             }}
             subtitle="Completed checkout orders"
@@ -598,110 +569,121 @@ Security Key    : ${sale.verificationCode}
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100/90">
-                {paginatedSales.map((sale) => (
-                  <tr
-                    key={sale.id}
-                    onClick={() => setSelectedSale(sale)}
-                    className="hover:bg-indigo-50/25 transition-colors group cursor-pointer"
-                  >
-                    {/* Sale ID Badge */}
-                    <td className="py-3.5 px-5 whitespace-nowrap">
-                      <span className="px-2.5 py-1 rounded-lg bg-indigo-50/90 text-[#4f46e5] font-mono font-bold text-xs border border-indigo-100/80 inline-block shadow-xs">
-                        {sale.id}
-                      </span>
-                    </td>
-
-                    {/* Date / Time */}
-                    <td className="py-3.5 px-4 whitespace-nowrap text-xs">
-                      <div className="flex items-center space-x-1.5 text-slate-700 font-semibold">
-                        <Calendar className="w-3 h-3 text-slate-400" />
-                        <span>{sale.date}</span>
+                {isLoading ? (
+                  <tr>
+                    <td colSpan={9} className="py-12 text-center text-slate-400 font-medium">
+                      <div className="flex items-center justify-center space-x-2">
+                        <Loader2 className="w-5 h-5 text-[#4f46e5] animate-spin" />
+                        <span>Loading sales transactions...</span>
                       </div>
-                      <p className="text-slate-400 font-mono text-[11px] pl-4">{sale.time}</p>
-                    </td>
-
-                    {/* Cashier */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <div className="flex items-center space-x-2">
-                        <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-[11px] border border-slate-200">
-                          {sale.cashier.charAt(0).toUpperCase()}
-                        </div>
-                        <span className="font-bold text-slate-800 text-xs">{sale.cashier}</span>
-                      </div>
-                    </td>
-
-                    {/* Customer */}
-                    <td className="py-3.5 px-4 whitespace-nowrap text-xs">
-                      {sale.customer.includes('VIP') ? (
-                        <span className="font-bold text-amber-700 inline-flex items-center space-x-1">
-                          <Sparkles className="w-3 h-3 text-amber-500" />
-                          <span>{sale.customer}</span>
-                        </span>
-                      ) : (
-                        <span className="font-medium text-slate-700">{sale.customer}</span>
-                      )}
-                    </td>
-
-                    {/* Items Count */}
-                    <td className="py-3.5 px-4 whitespace-nowrap text-xs">
-                      <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold text-[11px] inline-flex items-center space-x-1">
-                        <ShoppingBag className="w-3 h-3 text-slate-400" />
-                        <span>{sale.itemsCount} items</span>
-                      </span>
-                    </td>
-
-                    {/* Total Amount */}
-                    <td className="py-3.5 px-4 whitespace-nowrap font-extrabold text-slate-900">
-                      <span className="text-sm text-slate-900">{formatTZS(sale.total)}</span>
-                    </td>
-
-                    {/* Payment Method */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      {renderPaymentChip(sale)}
-                    </td>
-
-                    {/* Fiscal Status */}
-                    <td className="py-3.5 px-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-1 rounded-full font-bold text-[11px] shadow-xs border ${sale.fiscalStatus === 'SUCCESS'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-200/70'
-                        : sale.fiscalStatus === 'PENDING'
-                          ? 'bg-amber-50 text-amber-700 border-amber-200/70'
-                          : 'bg-rose-50 text-rose-700 border-rose-200/70'
-                        }`}>
-                        {sale.fiscalStatus === 'SUCCESS' && <ShieldCheck className="w-3 h-3 mr-1 text-emerald-600" />}
-                        {sale.fiscalStatus === 'PENDING' && <Clock3 className="w-3 h-3 mr-1 text-amber-600" />}
-                        {sale.fiscalStatus === 'SUCCESS' ? 'TRA Synced' : 'TRA Queued'}
-                      </span>
-                    </td>
-
-                    {/* Actions */}
-                    <td className="py-3.5 px-5 text-right whitespace-nowrap space-x-1.5" onClick={(e) => e.stopPropagation()}>
-                      <button
-                        onClick={() => setSelectedSale(sale)}
-                        title="View Sale Receipt"
-                        className="p-1.5 text-slate-500 hover:text-[#4f46e5] hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => setSelectedSale(sale)}
-                        title="Print Receipt"
-                        className="p-1.5 text-slate-500 hover:text-[#4f46e5] hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
-                      >
-                        <Printer className="w-4 h-4" />
-                      </button>
                     </td>
                   </tr>
-                ))}
+                ) : sales.length === 0 ? (
+                  <tr>
+                    <td colSpan={9} className="py-12 text-center text-slate-400 font-medium text-sm">
+                      <HistoryIcon className="w-8 h-8 mx-auto text-slate-300 mb-2" />
+                      No sales records found matching your filters.
+                    </td>
+                  </tr>
+                ) : (
+                  sales.map((sale) => (
+                    <tr
+                      key={sale.id}
+                      onClick={() => setSelectedSale(sale)}
+                      className="hover:bg-indigo-50/25 transition-colors group cursor-pointer"
+                    >
+                      {/* Sale ID Badge */}
+                      <td className="py-3.5 px-5 whitespace-nowrap">
+                        <span className="px-2.5 py-1 rounded-lg bg-indigo-50/90 text-[#4f46e5] font-mono font-bold text-xs border border-indigo-100/80 inline-block shadow-xs">
+                          {sale.id}
+                        </span>
+                      </td>
+
+                      {/* Date / Time */}
+                      <td className="py-3.5 px-4 whitespace-nowrap text-xs">
+                        <div className="flex items-center space-x-1.5 text-slate-700 font-semibold">
+                          <Calendar className="w-3 h-3 text-slate-400" />
+                          <span>{sale.date}</span>
+                        </div>
+                        <p className="text-slate-400 font-mono text-[11px] pl-4">{sale.time}</p>
+                      </td>
+
+                      {/* Cashier */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <div className="flex items-center space-x-2">
+                          <div className="w-7 h-7 rounded-full bg-slate-100 text-slate-700 flex items-center justify-center font-bold text-[11px] border border-slate-200">
+                            {sale.cashier ? sale.cashier.charAt(0).toUpperCase() : 'C'}
+                          </div>
+                          <span className="font-bold text-slate-800 text-xs">{sale.cashier}</span>
+                        </div>
+                      </td>
+
+                      {/* Customer */}
+                      <td className="py-3.5 px-4 whitespace-nowrap text-xs">
+                        {sale.customer && sale.customer.includes('VIP') ? (
+                          <span className="font-bold text-amber-700 inline-flex items-center space-x-1">
+                            <Sparkles className="w-3 h-3 text-amber-500" />
+                            <span>{sale.customer}</span>
+                          </span>
+                        ) : (
+                          <span className="font-medium text-slate-700">{sale.customer}</span>
+                        )}
+                      </td>
+
+                      {/* Items Count */}
+                      <td className="py-3.5 px-4 whitespace-nowrap text-xs">
+                        <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-bold text-[11px] inline-flex items-center space-x-1">
+                          <ShoppingBag className="w-3 h-3 text-slate-400" />
+                          <span>{sale.itemsCount} items</span>
+                        </span>
+                      </td>
+
+                      {/* Total Amount */}
+                      <td className="py-3.5 px-4 whitespace-nowrap font-extrabold text-slate-900">
+                        <span className="text-sm text-slate-900">{formatTZS(sale.total)}</span>
+                      </td>
+
+                      {/* Payment Method */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        {renderPaymentChip(sale)}
+                      </td>
+
+                      {/* Fiscal Status */}
+                      <td className="py-3.5 px-4 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full font-bold text-[11px] shadow-xs border ${sale.fiscalStatus === 'SUCCESS'
+                          ? 'bg-emerald-50 text-emerald-700 border-emerald-200/70'
+                          : sale.fiscalStatus === 'PENDING'
+                            ? 'bg-amber-50 text-amber-700 border-amber-200/70'
+                            : 'bg-rose-50 text-rose-700 border-rose-200/70'
+                          }`}>
+                          {sale.fiscalStatus === 'SUCCESS' && <ShieldCheck className="w-3 h-3 mr-1 text-emerald-600" />}
+                          {sale.fiscalStatus === 'PENDING' && <Clock3 className="w-3 h-3 mr-1 text-amber-600" />}
+                          {sale.fiscalStatus === 'SUCCESS' ? 'TRA Synced' : 'TRA Queued'}
+                        </span>
+                      </td>
+
+                      {/* Actions */}
+                      <td className="py-3.5 px-5 text-right whitespace-nowrap space-x-1.5" onClick={(e) => e.stopPropagation()}>
+                        <button
+                          onClick={() => setSelectedSale(sale)}
+                          title="View Sale Receipt"
+                          className="p-1.5 text-slate-500 hover:text-[#4f46e5] hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Eye className="w-4 h-4" />
+                        </button>
+                        <button
+                          onClick={() => setSelectedSale(sale)}
+                          title="Print Receipt"
+                          className="p-1.5 text-slate-500 hover:text-[#4f46e5] hover:bg-indigo-50 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <Printer className="w-4 h-4" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
-
-            {filteredSales.length === 0 && (
-              <div className="py-12 text-center text-slate-400 font-medium text-sm">
-                <HistoryIcon className="w-8 h-8 mx-auto text-slate-300 mb-2" />
-                No sales records found matching your filters.
-              </div>
-            )}
           </div>
 
           {/* Common Pagination Component (10 items per page) */}
@@ -709,7 +691,7 @@ Security Key    : ${sale.verificationCode}
             <Pagination
               currentPage={currentPage}
               totalPages={totalPages}
-              totalItems={filteredSales.length}
+              totalItems={totalItems}
               itemsPerPage={itemsPerPage}
               onPageChange={setCurrentPage}
               itemLabel="records"
@@ -789,213 +771,140 @@ Security Key    : ${sale.verificationCode}
         </div>
       )}
 
-      {/* ULTRA-CLEAN OFFICIAL TZA MART & TRA VFD FISCAL RECEIPT MODAL */}
+      {/* ULTRA-CLEAN MODERN RECEIPT MODAL */}
       {selectedSale && (
         <div
-          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-200"
+          className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150"
           onClick={() => setSelectedSale(null)}
         >
           <div
-            className="bg-white rounded-3xl max-w-lg w-full shadow-2xl border border-slate-200 overflow-hidden flex flex-col max-h-[92vh] animate-in zoom-in-95 duration-200 relative"
+            className="bg-white rounded-2xl max-w-md w-full shadow-2xl border border-slate-200/90 flex flex-col max-h-[90vh] overflow-hidden animate-in zoom-in-95 duration-150 relative"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Signature Top Purple Gradient Stripe */}
-            <div className="h-1 bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] flex-shrink-0" />
-
-            {/* SLEEK RECEIPT HEADER */}
-            <div className="p-4 sm:p-5 border-b border-slate-100 flex items-center justify-between flex-shrink-0">
+            {/* Modal Header */}
+            <div className="px-5 py-3.5 border-b border-slate-100 flex items-center justify-between flex-shrink-0 bg-slate-50/60">
               <div className="flex items-center space-x-2.5">
-                <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-[#4f46e5] to-[#7c3aed] text-white flex items-center justify-center shadow-xs flex-shrink-0">
-                  <ShoppingBag className="w-4.5 h-4.5" />
+                <div className="w-8 h-8 rounded-lg bg-[#4f46e5] text-white flex items-center justify-center font-black text-sm shadow-xs">
+                  TZ
                 </div>
                 <div>
                   <h3 className="text-sm font-black text-slate-900 tracking-tight leading-none">TZA MART TANZANIA</h3>
-                  <p className="text-[10.5px] text-slate-500 font-medium mt-0.5">Mlimani City Mall, Dar es Salaam</p>
+                  <p className="text-[10px] text-slate-500 font-medium mt-0.5">Mlimani City Mall, Dar es Salaam</p>
                 </div>
               </div>
-
               <button
                 type="button"
                 onClick={() => setSelectedSale(null)}
-                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-xl cursor-pointer hover:bg-slate-100 transition-colors"
-                title="Close receipt"
+                className="p-1.5 text-slate-400 hover:text-slate-700 rounded-lg hover:bg-slate-200/60 transition-colors cursor-pointer"
+                title="Close"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4.5 h-4.5" />
               </button>
             </div>
 
-            {/* SCROLLABLE RECEIPT BODY */}
-            <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5 text-slate-800">
-
-              {/* Store Registration TIN / VRN */}
-              <div className="text-[10.5px] text-slate-500 font-mono flex items-center justify-center space-x-3 py-1 bg-slate-50 rounded-xl border border-slate-200/60">
-                <span>TIN: <strong className="text-slate-800 font-bold">102-394-857</strong></span>
-                <span className="text-slate-300">|</span>
-                <span>VRN: <strong className="text-slate-800 font-bold">40012983-Z</strong></span>
+            {/* Scrollable Receipt Body */}
+            <div className="flex-1 overflow-y-auto px-5 py-3.5 space-y-3 text-slate-800 text-xs">
+              {/* TIN & VRN */}
+              <div className="text-[10px] text-slate-500 font-mono text-center pb-1">
+                TIN: <strong className="text-slate-700 font-bold">102-394-857</strong> | VRN: <strong className="text-slate-700 font-bold">40012983-Z</strong>
               </div>
 
-              {/* SALE METADATA CARD */}
-              <div className="bg-slate-50/90 rounded-2xl p-3 border border-slate-200/80 space-y-2.5">
-                <div className="flex items-center justify-between border-b border-slate-200/70 pb-1.5">
-                  <span className="text-[10.5px] font-extrabold text-slate-700 uppercase tracking-wider flex items-center">
-                    <Receipt className="w-3.5 h-3.5 mr-1 text-[#4f46e5]" />
-                    Sale Transaction Details
-                  </span>
-                  <span className="px-2 py-0.5 bg-indigo-100 text-[#4f46e5] text-[10.5px] font-black rounded-lg font-mono">
-                    {selectedSale.id}
-                  </span>
-                </div>
+              <div className="border-t border-dashed border-slate-200" />
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px]">
-                  <div>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase">Customer</p>
-                    <p className="font-extrabold text-slate-900 truncate">{selectedSale.customer}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase">Phone</p>
-                    <p className="font-bold text-slate-900 font-mono">{selectedSale.customerPhone || '+255 700 000 000'}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase">Date & Time</p>
-                    <p className="font-bold text-slate-900">{selectedSale.date} {selectedSale.time}</p>
-                  </div>
-                  <div>
-                    <p className="text-slate-400 text-[10px] font-bold uppercase">Cashier</p>
-                    <p className="font-bold text-slate-900 truncate">{selectedSale.cashier}</p>
-                  </div>
-                </div>
+              {/* Transaction Meta */}
+              <div className="grid grid-cols-2 gap-y-1.5 text-[11px] font-medium text-slate-600">
+                <div>Receipt #: <span className="font-mono font-bold text-slate-900">{selectedSale.id}</span></div>
+                <div>Date: <span className="font-mono text-slate-900">{selectedSale.date} {selectedSale.time}</span></div>
+                <div>Customer: <span className="font-bold text-slate-900">{selectedSale.customer}</span></div>
+                <div>Cashier: <span className="font-bold text-slate-900">{selectedSale.cashier}</span></div>
               </div>
 
-              {/* ITEMIZED PRODUCT TABLE */}
-              <div className="bg-white rounded-2xl border border-slate-200/90 overflow-hidden shadow-2xs">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50/90 text-slate-500 font-bold border-b border-slate-200 text-[10px] uppercase tracking-wider">
-                      <th className="py-2.5 px-3">#</th>
-                      <th className="py-2.5 px-3">Product Description</th>
-                      <th className="py-2.5 px-2 text-center">Qty</th>
-                      <th className="py-2.5 px-3 text-right">Price</th>
-                      <th className="py-2.5 px-3.5 text-right">Total</th>
+              <div className="border-t border-dashed border-slate-200" />
+
+              {/* Items Table */}
+              <table className="w-full text-left text-xs border-collapse">
+                <thead>
+                  <tr className="text-slate-400 font-extrabold text-[9.5px] uppercase tracking-wider border-b border-slate-100 pb-1">
+                    <th className="py-1">#</th>
+                    <th className="py-1">Item Description</th>
+                    <th className="py-1 text-center">Qty</th>
+                    <th className="py-1 text-right">Price</th>
+                    <th className="py-1 text-right">Total</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100/70 font-medium">
+                  {selectedSale.items.map((item, i) => (
+                    <tr key={i} className="text-[11.5px]">
+                      <td className="py-1.5 text-slate-400 font-bold text-[10px]">{i + 1}</td>
+                      <td className="py-1.5 font-bold text-slate-800">{item.product}</td>
+                      <td className="py-1.5 text-center font-mono text-slate-600">{item.quantity}x</td>
+                      <td className="py-1.5 text-right font-mono text-slate-600">{formatTZS(item.unitPrice)}</td>
+                      <td className="py-1.5 text-right font-black text-slate-900 font-mono">{formatTZS(item.total)}</td>
                     </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100 font-medium">
-                    {selectedSale.items.map((item, i) => (
-                      <tr key={i} className="hover:bg-slate-50/60 transition-colors">
-                        <td className="py-2.5 px-3 text-slate-400 font-bold text-[11px]">{i + 1}</td>
-                        <td className="py-2.5 px-3 font-bold text-slate-800">{item.product}</td>
-                        <td className="py-2.5 px-2 text-center font-bold text-slate-700 font-mono">
-                          <span className="px-1.5 py-0.5 rounded bg-slate-100 text-slate-700 text-[11px]">
-                            {item.quantity}x
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right text-slate-600 font-mono text-[11px]">
-                          {formatTZS(item.unitPrice)}
-                        </td>
-                        <td className="py-2.5 px-3.5 text-right font-black text-slate-900 font-mono">
-                          {formatTZS(item.total)}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                  ))}
+                </tbody>
+              </table>
 
-              {/* FINANCIAL TOTALS & PAYMENT MODE */}
-              <div className="bg-slate-50/90 rounded-2xl p-3 border border-slate-200/80 space-y-2">
-                <div className="space-y-1 text-[11.5px] font-medium">
-                  <div className="flex justify-between text-slate-600">
-                    <span>Subtotal (Net)</span>
-                    <span className="font-mono font-bold text-slate-900">{formatTZS(selectedSale.subtotal)}</span>
-                  </div>
-                  <div className="flex justify-between text-slate-500">
-                    <span>18% TRA VAT Tax (Included)</span>
-                    <span className="font-mono text-slate-700">{formatTZS(selectedSale.tax)}</span>
-                  </div>
-                  <div className="flex justify-between font-black text-sm pt-1.5 border-t border-slate-200 text-slate-900">
-                    <span>Grand Total</span>
-                    <span className="font-mono text-[#4f46e5] text-base">{formatTZS(selectedSale.total)}</span>
-                  </div>
+              <div className="border-t border-dashed border-slate-200" />
+
+              {/* Financial Totals */}
+              <div className="space-y-1 text-[11.5px]">
+                <div className="flex justify-between text-slate-500">
+                  <span>Subtotal (Net)</span>
+                  <span className="font-mono font-bold text-slate-800">{formatTZS(selectedSale.subtotal)}</span>
                 </div>
-
-                <div className="pt-2 border-t border-slate-200/80 flex items-center justify-between">
-                  <span className="text-slate-500 font-medium text-[11px]">Payment Mode:</span>
+                <div className="flex justify-between text-slate-400 text-[10.5px]">
+                  <span>18% TRA VAT Tax (Included)</span>
+                  <span className="font-mono">{formatTZS(selectedSale.tax)}</span>
+                </div>
+                <div className="flex justify-between items-center font-black text-sm pt-1.5 border-t border-slate-100 text-slate-900">
+                  <span>Grand Total</span>
+                  <span className="font-mono text-[#4f46e5] text-base">{formatTZS(selectedSale.total)}</span>
+                </div>
+                <div className="flex justify-between items-center pt-1 text-[11px]">
+                  <span className="text-slate-500 font-medium">Payment Mode:</span>
                   <div>{renderPaymentChip(selectedSale)}</div>
                 </div>
               </div>
 
-              {/* TRA VFD FISCAL VERIFICATION BOX */}
-              <div className="bg-emerald-50/70 rounded-2xl p-3 border border-emerald-200/90 space-y-2">
-                <div className="flex items-center justify-between border-b border-emerald-200/70 pb-1.5">
-                  <div className="flex items-center space-x-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                    <span className="text-[10.5px] font-black text-emerald-950 uppercase tracking-wider">
-                      TRA VFD Fiscal Information
-                    </span>
-                  </div>
-                  <span className={`px-2 py-0.5 text-[9.5px] font-extrabold rounded-full ${selectedSale.fiscalStatus === 'SUCCESS' ? 'bg-emerald-600 text-white' : 'bg-amber-500 text-white'
-                    }`}>
-                    {selectedSale.fiscalStatus === 'SUCCESS' ? 'VERIFIED' : 'QUEUED'}
+              <div className="border-t border-dashed border-slate-200" />
+
+              {/* TRA VFD Fiscal Status Footer */}
+              <div className="bg-emerald-50/80 rounded-xl p-2.5 border border-emerald-200/80 text-[10.5px] space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="font-extrabold text-emerald-900 flex items-center gap-1">
+                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                    TRA VFD Verified
                   </span>
+                  <span className="font-mono font-bold text-emerald-950 text-[10px]">{selectedSale.fiscalReceiptNo}</span>
                 </div>
-
-                <div className="grid grid-cols-2 gap-2 text-[10.5px]">
-                  <div>
-                    <p className="text-emerald-800/70 font-medium text-[9.5px]">Fiscal Receipt No.</p>
-                    <p className="font-bold text-emerald-950 font-mono text-[10.5px]">{selectedSale.fiscalReceiptNo}</p>
-                  </div>
-                  <div>
-                    <p className="text-emerald-800/70 font-medium text-[9.5px]">Fiscal Device ID</p>
-                    <p className="font-bold text-emerald-950 font-mono text-[10.5px]">{selectedSale.fiscalDevice}</p>
-                  </div>
-                </div>
-
-                <div className="bg-white rounded-xl p-2 border border-emerald-200/80 space-y-1">
-                  <div className="flex items-center justify-between">
-                    <span className="text-[9.5px] font-bold text-emerald-900 uppercase tracking-wider">
-                      Verification Security Key
-                    </span>
-                    <span className="text-[9px] font-bold bg-emerald-100 text-emerald-800 px-1.5 py-0.2 rounded">
-                      TRA Official
-                    </span>
-                  </div>
-                  <div className="p-1.5 bg-slate-900 text-emerald-400 font-mono text-center rounded-lg text-xs tracking-widest font-black">
-                    {selectedSale.verificationCode}
-                  </div>
-                </div>
-              </div>
-
-              {/* THANK YOU FOOTER */}
-              <div className="text-center text-slate-400 text-[10.5px] space-y-0.5 pt-1">
-                <p className="font-bold text-slate-700">Asante kwa kununua TZA Mart Tanzania! Karibu tena.</p>
-                <p className="text-[9.5px]">Powered by TZA Mart POS & TRA VFD Middleware System</p>
+                <p className="font-mono text-center text-emerald-800 text-[10px]">Key: {selectedSale.verificationCode}</p>
               </div>
 
             </div>
 
-            {/* MODAL ACTION BUTTONS (Always accessible at the bottom) */}
-            <div className="p-3.5 border-t border-slate-100 flex items-center space-x-2.5 bg-slate-50/80 flex-shrink-0 print:hidden">
+            {/* Action Buttons */}
+            <div className="p-3 border-t border-slate-100 flex items-center space-x-2 bg-slate-50/80 flex-shrink-0">
               <button
                 type="button"
                 onClick={() => handleDownloadReceipt(selectedSale)}
-                className="flex-1 py-2.5 bg-gradient-to-r from-[#4f46e5] to-[#7c3aed] hover:opacity-95 text-white rounded-xl font-bold text-xs shadow-md shadow-indigo-500/20 flex items-center justify-center space-x-1.5 cursor-pointer transition-all"
+                className="flex-1 py-2 bg-[#4f46e5] hover:bg-indigo-700 text-white rounded-xl font-bold text-xs shadow-xs flex items-center justify-center space-x-1.5 cursor-pointer transition-colors"
               >
-                <Download className="w-4 h-4" />
+                <Download className="w-3.5 h-3.5" />
                 <span>Download</span>
               </button>
-
               <button
                 type="button"
                 onClick={handlePrintReceipt}
-                className="px-4 py-2.5 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs flex items-center space-x-1.5 cursor-pointer transition-all shadow-2xs"
+                className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 rounded-xl font-bold text-xs flex items-center space-x-1.5 cursor-pointer transition-colors shadow-2xs"
               >
-                <Printer className="w-4 h-4" />
+                <Printer className="w-3.5 h-3.5" />
                 <span>Print</span>
               </button>
-
               <button
                 type="button"
                 onClick={() => setSelectedSale(null)}
-                className="px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl font-bold text-xs cursor-pointer transition-all"
+                className="px-3.5 py-2 bg-slate-200/70 hover:bg-slate-200 text-slate-700 rounded-xl font-bold text-xs cursor-pointer transition-colors"
               >
                 Close
               </button>

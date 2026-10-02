@@ -369,20 +369,7 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-5 pt-1">
-              <div>
-                <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1.5 tracking-wider">
-                  TRA VFD Endpoint URL
-                </label>
-                <input
-                  type="text"
-                  value={vfdServerUrl}
-                  onChange={(e) => setVfdServerUrl(e.target.value)}
-                  placeholder="https://vfd.tra.go.tz/api/v1"
-                  className="w-full px-4 py-2.5 bg-slate-50/80 border border-slate-200 rounded-2xl text-sm font-mono text-slate-800 focus:outline-none focus:ring-2 focus:ring-[#4f46e5]/20 focus:border-[#4f46e5] focus:bg-white transition-all"
-                />
-              </div>
-
+            <div className="pt-1">
               <div>
                 <label className="block text-[11px] font-bold text-slate-600 uppercase mb-1.5 tracking-wider">
                   EFD / VFD Device ID
