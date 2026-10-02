@@ -1,0 +1,306 @@
+{
+  "project": "TzSuperPOS Backend API Catalog",
+  "baseUrl": "http://127.0.0.1:5000/api",
+  "version": "1.0.0",
+  "endpoints": {
+    "Health": [
+      {
+        "name": "Health Check",
+        "method": "GET",
+        "path": "/api/health",
+        "description": "Check if Flask backend API server is healthy and running"
+      }
+    ],
+    "Authentication": [
+      {
+        "name": "User Login",
+        "method": "POST",
+        "path": "/api/auth/login",
+        "description": "Authenticate user credentials and receive JWT access token",
+        "requestBody": {
+          "username": "manoj123",
+          "password": "12345"
+        }
+      },
+      {
+        "name": "Get Current User Profile",
+        "method": "GET",
+        "path": "/api/auth/me",
+        "description": "Fetch details of currently authenticated user session",
+        "headers": {
+          "Authorization": "Bearer <JWT_TOKEN>"
+        }
+      },
+      {
+        "name": "Refresh JWT Token",
+        "method": "POST",
+        "path": "/api/auth/refresh",
+        "description": "Obtain fresh access token using refresh token",
+        "headers": {
+          "Authorization": "Bearer <REFRESH_TOKEN>"
+        }
+      },
+      {
+        "name": "Change Password",
+        "method": "POST",
+        "path": "/api/auth/change-password",
+        "description": "Update current user account password",
+        "requestBody": {
+          "oldPassword": "12345",
+          "newPassword": "newpassword123"
+        }
+      }
+    ],
+    "Dashboard": [
+      {
+        "name": "Dashboard Summary",
+        "method": "GET",
+        "path": "/api/dashboard/summary",
+        "queryParams": {
+          "preset": "TODAY | WEEK | MONTH | ALL",
+          "startDate": "YYYY-MM-DD",
+          "endDate": "YYYY-MM-DD"
+        },
+        "description": "Returns real-time KPI metrics, chart data, and recent transactions"
+      }
+    ],
+    "POS Sales & Checkout": [
+      {
+        "name": "Process Checkout & Create Invoice",
+        "method": "POST",
+        "path": "/api/sales/checkout",
+        "description": "Complete POS checkout, deduct inventory stock, and return TRA VFD fiscal receipt",
+        "requestBody": {
+          "items": [
+            {
+              "productId": "1",
+              "quantity": 2,
+              "unitPrice": 4500
+            }
+          ],
+          "paymentMethod": "CASH | MOBILE MONEY | CARD / BANK",
+          "customerName": "Walk-in Customer",
+          "amountPaid": 10000
+        }
+      },
+      {
+        "name": "Get Sales History List",
+        "method": "GET",
+        "path": "/api/sales",
+        "queryParams": {
+          "search": "sale_number / cashier",
+          "paymentMethod": "CASH | MOBILE MONEY | CARD",
+          "dateFilter": "TODAY | WEEK | MONTH | ALL",
+          "page": 1,
+          "limit": 20
+        },
+        "description": "Fetch paginated sales history list with totals"
+      },
+      {
+        "name": "Get Printable Fiscal Receipt Details",
+        "method": "GET",
+        "path": "/api/sales/receipt/<receipt_no>",
+        "description": "Fetch TRA verified receipt object for printing or PDF download"
+      }
+    ],
+    "Customers": [
+      {
+        "name": "Get Customer Directory List",
+        "method": "GET",
+        "path": "/api/customers",
+        "queryParams": {
+          "search": "name/phone/email",
+          "tier": "ALL | VIP | REGULAR | NEW",
+          "sortBy": "TOTAL_DESC | TOTAL_ASC",
+          "page": 1,
+          "limit": 20
+        },
+        "description": "Fetch paginated customer records with search and filters"
+      },
+      {
+        "name": "Get Customer Stats",
+        "method": "GET",
+        "path": "/api/customers/stats",
+        "description": "Fetch total customer count, lifetime value, and VIP metrics"
+      },
+      {
+        "name": "Get Customer By ID",
+        "method": "GET",
+        "path": "/api/customers/<id>",
+        "description": "Fetch single customer record details"
+      },
+      {
+        "name": "Get Customer Profile & History",
+        "method": "GET",
+        "path": "/api/customers/<id>/profile",
+        "description": "Fetch full purchase history cards and spending KPIs for a customer"
+      },
+      {
+        "name": "Create Customer",
+        "method": "POST",
+        "path": "/api/customers",
+        "requestBody": {
+          "name": "Juma Rashid",
+          "phone": "+255754123456",
+          "email": "juma.rashid@gmail.com"
+        },
+        "description": "Register a new customer record"
+      },
+      {
+        "name": "Update Customer",
+        "method": "PUT",
+        "path": "/api/customers/<id>",
+        "description": "Update customer profile details"
+      },
+      {
+        "name": "Delete Customer",
+        "method": "DELETE",
+        "path": "/api/customers/<id>",
+        "description": "Remove customer record"
+      }
+    ],
+    "Products": [
+      {
+        "name": "Get Products List",
+        "method": "GET",
+        "path": "/api/products",
+        "queryParams": {
+          "category": "All",
+          "search": "product name / SKU"
+        },
+        "description": "Fetch product catalog items"
+      },
+      {
+        "name": "Create Product",
+        "method": "POST",
+        "path": "/api/products",
+        "description": "Add new inventory product"
+      },
+      {
+        "name": "Update Product",
+        "method": "PUT",
+        "path": "/api/products/<id>",
+        "description": "Update product details & price"
+      },
+      {
+        "name": "Delete Product",
+        "method": "DELETE",
+        "path": "/api/products/<id>",
+        "description": "Delete product record"
+      }
+    ],
+    "Categories": [
+      {
+        "name": "Get Categories List",
+        "method": "GET",
+        "path": "/api/categories",
+        "description": "Fetch product category list"
+      },
+      {
+        "name": "Create Category",
+        "method": "POST",
+        "path": "/api/categories",
+        "description": "Add new product category"
+      }
+    ],
+    "Inventory": [
+      {
+        "name": "Get Inventory Movements & Levels",
+        "method": "GET",
+        "path": "/api/inventory",
+        "description": "Fetch stock levels, movements, and reorder warnings"
+      },
+      {
+        "name": "Adjust Stock Quantity",
+        "method": "POST",
+        "path": "/api/inventory/adjust",
+        "requestBody": {
+          "productId": 1,
+          "adjustment": 10,
+          "reason": "Restock arrival"
+        },
+        "description": "Add or deduct inventory stock quantity with audit entry"
+      },
+      {
+        "name": "Get Inventory Stats",
+        "method": "GET",
+        "path": "/api/inventory/stats",
+        "description": "Fetch total items, low stock warnings, out of stock counts"
+      }
+    ],
+    "Reports & Analytics": [
+      {
+        "name": "Get Reports Analytics Summary",
+        "method": "GET",
+        "path": "/api/reports/summary",
+        "queryParams": {
+          "preset": "TODAY | WEEK | MONTH | ALL",
+          "startDate": "YYYY-MM-DD",
+          "endDate": "YYYY-MM-DD"
+        },
+        "description": "Fetch comprehensive sales, product rankings, customer analytics, cashier performance, and TRA fiscal tax data"
+      }
+    ],
+    "Audit Logs": [
+      {
+        "name": "Get Audit Logs List",
+        "method": "GET",
+        "path": "/api/audit-logs",
+        "queryParams": {
+          "search": "action/user/IP",
+          "category": "ALL | AUTH | SALES | INVENTORY | SETTINGS | USERS",
+          "status": "ALL | SUCCESS | WARNING | FAILED",
+          "page": 1,
+          "limit": 20
+        },
+        "description": "Fetch paginated system audit log entries and security event metrics"
+      },
+      {
+        "name": "Create Audit Log Entry",
+        "method": "POST",
+        "path": "/api/audit-logs",
+        "description": "Record a new client/server audit event"
+      }
+    ],
+    "Settings": [
+      {
+        "name": "Get Store Settings",
+        "method": "GET",
+        "path": "/api/settings",
+        "description": "Fetch store details, TIN, VRN, VAT Rate (%), receipt header & footer"
+      },
+      {
+        "name": "Update Store Settings",
+        "method": "PUT",
+        "path": "/api/settings",
+        "description": "Update store details and VAT rate"
+      }
+    ],
+    "User Management": [
+      {
+        "name": "Get Staff Users List",
+        "method": "GET",
+        "path": "/api/users",
+        "description": "Fetch list of registered admin and cashier accounts"
+      },
+      {
+        "name": "Create Staff User Account",
+        "method": "POST",
+        "path": "/api/users",
+        "description": "Create new cashier or administrator user"
+      },
+      {
+        "name": "Update User Account",
+        "method": "PUT",
+        "path": "/api/users/<id>",
+        "description": "Update user role or status"
+      },
+      {
+        "name": "Delete User Account",
+        "method": "DELETE",
+        "path": "/api/users/<id>",
+        "description": "Remove user account"
+      }
+    ]
+  }
+}
