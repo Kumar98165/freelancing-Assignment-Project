@@ -203,17 +203,21 @@ export default function Login() {
           <span>Quick Demo:</span>
           <button
             type="button"
-            onClick={() => setDemo('admin', 'admin')}
-            className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[#5b4dfb] hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
+            onClick={() => setDemo('admin', 'admin123')}
+            className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-[#5b4dfb] hover:bg-indigo-50 hover:border-indigo-300 transition-all cursor-pointer shadow-2xs flex items-center space-x-1.5"
+            title="Auto-fill Admin Credentials (admin / admin123)"
           >
-            Admin
+            <ShieldCheck className="w-3.5 h-3.5 text-indigo-600" />
+            <span>Admin</span>
           </button>
           <button
             type="button"
-            onClick={() => setDemo('cashier', 'cashier')}
-            className="px-2.5 py-1 bg-white border border-slate-200 rounded-lg text-[#5b4dfb] hover:bg-slate-50 transition-all cursor-pointer shadow-2xs"
+            onClick={() => setDemo('manoj123', '12345')}
+            className="px-3 py-1.5 bg-white border border-slate-200 rounded-xl text-[#5b4dfb] hover:bg-purple-50 hover:border-purple-300 transition-all cursor-pointer shadow-2xs flex items-center space-x-1.5"
+            title="Auto-fill Cashier Credentials (manoj123 / 12345)"
           >
-            Cashier
+            <ShoppingCart className="w-3.5 h-3.5 text-purple-600" />
+            <span>Cashier</span>
           </button>
         </div>
 
