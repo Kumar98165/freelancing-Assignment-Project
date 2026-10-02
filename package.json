@@ -1,0 +1,13 @@
+{
+  "name": "tzsuperpos-project",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TzSuperPOS Supermarket Management System - 1-Click Unified Master Launcher",
+  "scripts": {
+    "start": "python run_project.py",
+    "dev": "python run_project.py",
+    "backend": "cd backend && python run.py",
+    "frontend": "cd frontend && npm run dev",
+    "seed": "cd backend && python seed.py"
+  }
+}
